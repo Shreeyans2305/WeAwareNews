@@ -565,7 +565,7 @@ function HomePage() {
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [phase, setPhase] = useState<Phase>("intro");
+  const [phase, setPhase] = useState<Phase>("reveal");
   return (
     <div>
       <AnimatePresence mode="wait">
