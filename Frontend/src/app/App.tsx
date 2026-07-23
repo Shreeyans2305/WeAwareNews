@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { CheckCircle, Globe, Zap, Shield, FileText, Radio, ChevronRight, ArrowUpRight, Search, Bookmark, Share2 } from "lucide-react";
+import { CheckCircle, Globe, Zap, Shield, FileText, Radio, ChevronRight, ArrowUpRight, Search, Bookmark, Share2, ArrowLeft, Check } from "lucide-react";
+import { HashRouter, Routes, Route, useNavigate, useParams } from "react-router";
+import { ImageWithFallback } from "./components/figma/ImageWithFallback";
 
 type Phase = "intro" | "reveal" | "home";
 
@@ -107,17 +109,50 @@ const SECONDARY = [
 ];
 
 const BRIEFS = [
-  { category: "Science",   text: "Webb telescope spectroscopic data shows dimethyl sulfide on K2-18b exceeding abiotic thresholds by factor of 12, reigniting life-detection debate." },
-  { category: "Health",    text: "Genomic sequencing confirms novel betacoronavirus variant with R0 estimated 2.1–3.4. No evidence of severe disease in healthy adults as of publication." },
-  { category: "Politics",  text: "Senate Intelligence Committee releases declassified 340-page report detailing AI-assisted influence operations during the 2025 election cycle." },
-  { category: "Economy",   text: "Markets gained 4.2% following coordinated central bank statement — the broadest policy alignment among G20 members since 2009." },
-  { category: "AI",        text: "Leaked internal timeline from leading AI lab suggests general capability threshold reached in 2025, one year ahead of any published roadmap." },
+  { category: "Science",   text: "Webb telescope spectroscopic data shows dimethyl sulfide on K2-18b exceeding abiotic thresholds by factor of 12, reigniting life-detection debate.", image: "https://images.unsplash.com/photo-1446776653964-20c1d3a81b06?w=600&h=400&fit=crop&auto=format" },
+  { category: "Health",    text: "Genomic sequencing confirms novel betacoronavirus variant with R0 estimated 2.1–3.4. No evidence of severe disease in healthy adults as of publication.", image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=600&h=400&fit=crop&auto=format" },
+  { category: "Politics",  text: "Senate Intelligence Committee releases declassified 340-page report detailing AI-assisted influence operations during the 2025 election cycle.", image: "https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=600&h=400&fit=crop&auto=format" },
+  { category: "Economy",   text: "Markets gained 4.2% following coordinated central bank statement — the broadest policy alignment among G20 members since 2009.", image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=600&h=400&fit=crop&auto=format" },
+  { category: "AI",        text: "Leaked internal timeline from leading AI lab suggests general capability threshold reached in 2025, one year ahead of any published roadmap.", image: "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=600&h=400&fit=crop&auto=format" },
 ];
 
 const OPINIONS = [
-  { headline: "The Quiet Crisis in Long-Term Care Has Finally Reached Its Tipping Point", author: "Dr. Amara Diallo", role: "Health Policy Analyst", date: "July 21" },
-  { headline: "Why AI Governance Has Become a Hollow Phrase in International Diplomacy",  author: "Theo Wakefield",   role: "Technology Correspondent", date: "July 20" },
-  { headline: "Cities Are Repeating the Same Housing Mistakes From the 1970s, Again",      author: "Ruth Nakata",     role: "Urban Affairs Reporter",    date: "July 19" },
+  { headline: "The Quiet Crisis in Long-Term Care Has Finally Reached Its Tipping Point", author: "Dr. Amara Diallo", role: "Health Policy Analyst", date: "July 21", image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=600&h=400&fit=crop&auto=format" },
+  { headline: "Why AI Governance Has Become a Hollow Phrase in International Diplomacy",  author: "Theo Wakefield",   role: "Technology Correspondent", date: "July 20", image: "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=600&h=400&fit=crop&auto=format" },
+  { headline: "Cities Are Repeating the Same Housing Mistakes From the 1970s, Again",      author: "Ruth Nakata",     role: "Urban Affairs Reporter",    date: "July 19", image: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=600&h=400&fit=crop&auto=format" },
+];
+
+const slugify = (text: string) =>
+  text.toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+
+const ALL_ARTICLES = [
+  { ...FEATURED, type: "featured" },
+  ...SECONDARY.map(s => ({ ...s, type: "secondary" })),
+  ...BRIEFS.map(b => ({
+    category: b.category,
+    headline: b.text,
+    excerpt: b.text,
+    image: b.image,
+    author: "WeAware AI",
+    date: "July 21, 2026",
+    sources: 42,
+    neutrality: 97,
+    type: "brief"
+  })),
+  ...OPINIONS.map(o => ({
+    category: "Analysis",
+    headline: o.headline,
+    excerpt: o.headline,
+    image: o.image,
+    author: o.author,
+    role: o.role,
+    date: o.date,
+    sources: 18,
+    neutrality: 98,
+    type: "opinion"
+  }))
 ];
 
 // ─── Intro Video ──────────────────────────────────────────────────────────────
@@ -158,7 +193,7 @@ function IntroVideo({ onComplete }: { onComplete: () => void }) {
           transition={{ duration: 0.1 }}
         >
           {/* Grayscale image */}
-          <img
+          <ImageWithFallback
             src={frame.image}
             alt=""
             className="w-full h-full object-cover"
@@ -296,6 +331,12 @@ function RevealScreen({ onEnter }: { onEnter: () => void }) {
 // ─── Home Page ────────────────────────────────────────────────────────────────
 function HomePage() {
   const [activeNav, setActiveNav] = useState("World");
+  const navigate = useNavigate();
+
+  const handleSelect = (story: any) => {
+    const title = story.headline || story.text;
+    navigate("/article/" + slugify(title));
+  };
 
   return (
     <motion.div
@@ -372,9 +413,9 @@ function HomePage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 border border-border">
 
           {/* Feature */}
-          <article className="lg:col-span-7 border-b lg:border-b-0 lg:border-r border-border cursor-pointer group">
+          <article onClick={() => handleSelect(FEATURED)} className="lg:col-span-7 border-b lg:border-b-0 lg:border-r border-border cursor-pointer group">
             <div className="h-72 md:h-96 bg-muted overflow-hidden">
-              <img
+              <ImageWithFallback
                 src={FEATURED.image}
                 alt={FEATURED.headline}
                 className="w-full h-full object-cover grayscale opacity-90 group-hover:opacity-100 transition-opacity duration-500"
@@ -416,7 +457,7 @@ function HomePage() {
           {/* Secondary */}
           <div className="lg:col-span-5 flex flex-col divide-y divide-border">
             {SECONDARY.map(story => (
-              <article key={story.headline} className="flex gap-0 group cursor-pointer hover:bg-secondary transition-colors">
+              <article key={story.headline} onClick={() => handleSelect(story)} className="flex gap-0 group cursor-pointer hover:bg-secondary transition-colors">
                 <div className="flex-1 p-5">
                   <span className="text-xs tracking-widest uppercase font-semibold text-foreground border-b border-foreground pb-0.5 inline-block mb-2"
                     style={{ fontFamily: MONO }}>
@@ -433,7 +474,7 @@ function HomePage() {
                   </div>
                 </div>
                 <div className="w-24 md:w-28 flex-shrink-0 overflow-hidden bg-muted">
-                  <img
+                  <ImageWithFallback
                     src={story.image}
                     alt={story.headline}
                     className="w-full h-full object-cover grayscale opacity-80 group-hover:opacity-100 transition-opacity duration-300"
@@ -458,14 +499,25 @@ function HomePage() {
             </h2>
             <div className="flex flex-col divide-y divide-border">
               {BRIEFS.map(brief => (
-                <div key={brief.text} className="py-4 cursor-pointer group">
-                  <span className="text-xs tracking-widest uppercase font-semibold text-foreground border-b border-foreground pb-0.5 inline-block mb-2"
-                    style={{ fontFamily: MONO }}>
-                    {brief.category}
-                  </span>
-                  <p className="text-sm leading-relaxed text-muted-foreground group-hover:text-foreground transition-colors">
-                    {brief.text}
-                  </p>
+                <div key={brief.text} onClick={() => handleSelect(brief)} className="py-4 cursor-pointer group flex items-start gap-4 justify-between">
+                  <div className="flex-1">
+                    <span className="text-xs tracking-widest uppercase font-semibold text-foreground border-b border-foreground pb-0.5 inline-block mb-2"
+                      style={{ fontFamily: MONO }}>
+                      {brief.category}
+                    </span>
+                    <p className="text-sm leading-relaxed text-muted-foreground group-hover:text-foreground transition-colors">
+                      {brief.text}
+                    </p>
+                  </div>
+                  {brief.image && (
+                    <div className="w-16 h-16 md:w-20 md:h-20 flex-shrink-0 overflow-hidden bg-muted mt-2 border border-border">
+                      <ImageWithFallback
+                        src={brief.image}
+                        alt={brief.category}
+                        className="w-full h-full object-cover grayscale opacity-80 group-hover:opacity-100 transition-opacity duration-300"
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -479,21 +531,32 @@ function HomePage() {
             </h2>
             <div className="flex flex-col divide-y divide-border">
               {OPINIONS.map((piece, i) => (
-                <article key={piece.headline} className="py-5 group cursor-pointer">
-                  <div className="flex items-start gap-4">
-                    <span className="text-2xl font-bold text-muted-foreground/30 leading-none mt-0.5 select-none"
-                      style={{ fontFamily: SERIF }}>
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <div>
-                      <h3 className="font-semibold leading-snug text-sm md:text-base group-hover:underline underline-offset-2"
+                <article key={piece.headline} onClick={() => handleSelect(piece)} className="py-5 group cursor-pointer">
+                  <div className="flex items-start gap-4 justify-between">
+                    <div className="flex items-start gap-4 flex-1">
+                      <span className="text-2xl font-bold text-muted-foreground/30 leading-none mt-0.5 select-none"
                         style={{ fontFamily: SERIF }}>
-                        {piece.headline}
-                      </h3>
-                      <div className="mt-2 text-xs text-muted-foreground" style={{ fontFamily: MONO }}>
-                        {piece.author} — {piece.role} · {piece.date}
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <div>
+                        <h3 className="font-semibold leading-snug text-sm md:text-base group-hover:underline underline-offset-2"
+                          style={{ fontFamily: SERIF }}>
+                          {piece.headline}
+                        </h3>
+                        <div className="mt-2 text-xs text-muted-foreground" style={{ fontFamily: MONO }}>
+                          {piece.author} — {piece.role} · {piece.date}
+                        </div>
                       </div>
                     </div>
+                    {piece.image && (
+                      <div className="w-16 h-16 md:w-20 md:h-20 flex-shrink-0 overflow-hidden bg-muted border border-border">
+                        <ImageWithFallback
+                          src={piece.image}
+                          alt={piece.headline}
+                          className="w-full h-full object-cover grayscale opacity-80 group-hover:opacity-100 transition-opacity duration-300"
+                        />
+                      </div>
+                    )}
                   </div>
                 </article>
               ))}
@@ -563,16 +626,317 @@ function HomePage() {
   );
 }
 
+function getArticleDetails(headline: string) {
+  const defaultDetails = {
+    paragraphs: [
+      "The situation continues to unfold rapidly as international observers monitor developments. Preliminary assessments indicate a shifting consensus among key stakeholders, driven by technological adaptations and evolving regulatory frameworks.",
+      "According to documents analyzed by WeAware AI across 48 distinct regional reports, the core of the issue lies in the alignment of compliance guidelines with operational realities. Industry representatives assert that excessive oversight could hinder progress, whereas public advocates emphasize the necessity of strict guardrails to prevent systemic risk.",
+      "As of today, verification models indicate a 98% consensus match across verified public data repositories, with no signs of coordinated influence campaigns or localized bias anomalies."
+    ],
+    sourcesBreakdown: { government: 35, media: 45, academic: 20 },
+    neutralityVectors: { left: 49, right: 51, bias: "Neutral" }
+  };
+
+  const articleDb: Record<string, typeof defaultDetails> = {
+    "Global AI Governance Framework Reaches Critical Juncture as Nations Divide on Oversight": {
+      paragraphs: [
+        "In a landmark closed-door negotiation held in Geneva, delegates representing 47 nations failed to establish a unified regulatory charter for frontier artificial intelligence models. The primary deadlock remains the division between states advocating for pre-deployment licensing regimes—similar to pharmaceutical approvals—and those favoring a post-deployment liability model focused on demonstrable harms.",
+        "The draft resolution, which aimed to establish a 'World AI Organization' (WAIO), was rejected after standard protocol definitions for 'autonomous reasoning' could not be resolved. Representatives from leading tech hubs argued that strict pre-licensing would stifle small-scale open-source developer communities, effectively solidifying a monopoly for existing tech conglomerates.",
+        "WeAware's analysis of 214 regional source publications suggests that public sentiment remains highly polarized, yet factual reporting indicates that national cybersecurity agencies are quietly aligning on technical benchmark testing, regardless of the legislative impasse. This suggests a functional, standards-driven harmonization is occurring underneath the diplomatic friction."
+      ],
+      sourcesBreakdown: { government: 45, media: 30, academic: 25 },
+      neutralityVectors: { left: 50, right: 50, bias: "Absolute Neutral" }
+    },
+    "Quantum Computing Breakthrough Forces Urgent Review of Global Financial Security": {
+      paragraphs: [
+        "A joint research consortium of physicists and cryptographers has successfully demonstrated a stable 2,000-qubit quantum processor capable of executing modular arithmetic computations at speeds previously considered theoretical. The breakthrough, which significantly reduces the decoherence window, brings the timeline for cracking standard RSA-2048 encryption keys closer by nearly half a decade.",
+        "Global financial infrastructure, which relies heavily on public-key cryptography to secure transactions, communications, and ledger validations, is facing an immediate transition period. The National Institute of Standards and Technology (NIST) has issued an emergency advisory recommending accelerated adoption of post-quantum cryptographic (PQC) algorithms.",
+        "According to 87 verified announcements from financial consortiums and security firms, the financial sector plans to allocate upward of $45 billion globally over the next 24 months to transition legacy public key systems. Analysts note that while the threat is real, the immediate risk is mitigated by the extreme scarcity and cost of manufacturing quantum processing units."
+      ],
+      sourcesBreakdown: { government: 30, media: 40, academic: 30 },
+      neutralityVectors: { left: 48, right: 52, bias: "Factual" }
+    },
+    "Antarctic Mass Loss Accelerates to 340 Gigatons Per Year, Six Agencies Confirm": {
+      paragraphs: [
+        "A unified report blending satellite gravimetry, altimetry, and radar interferometry has confirmed that the Antarctic Ice Sheet is losing mass at an accelerated rate of approximately 340 gigatons per year. This rate represents a 22% increase in ice discharge compared to the previous decade, primarily driven by the warming of circumpolar deep water currents encroaching on ice shelf foundations.",
+        "The collaborative analysis, which reconciled data from ESA's CryoSat-2, NASA's ICESat-2, and regional ground sensor arrays, highlights the Amundsen Sea Sector as the most critical point of vulnerability. Glaciologists warned that the destabilization of the Thwaites Glacier shelf could trigger a multi-foot sea-level rise over the next two centuries if oceanic thermal trends persist.",
+        "Factual coverage across international research bodies displays a high level of consensus (97.8% neutrality). The report stresses that local mitigation is impossible, and global efforts must pivot toward monitoring coastal vulnerability zones to plan long-term infrastructure adaptation."
+      ],
+      sourcesBreakdown: { government: 55, media: 15, academic: 30 },
+      neutralityVectors: { left: 50, right: 50, bias: "Absolute Factual" }
+    },
+    "Chipmaker Alliance Announces $800B Plan to End Global AI Compute Bottleneck": {
+      paragraphs: [
+        "A newly formed consortium of semiconductor manufacturers, hyperscalers, and sovereign wealth funds has announced an unprecedented $800 billion capital expenditure plan to establish a decentralized global chip fabrication network. The initiative aims to build ten advanced packaging and lithography facilities across Europe, North America, and Japan over the next six years.",
+        "The announcement is a direct response to the ongoing compute supply bottleneck, which has restricted AI development to a handful of heavily capitalized entities. By diversifying fabrication sites away from geographically concentrated zones, the alliance seeks to stabilize supply chains against geopolitical disruptions.",
+        "Industry analysts are optimistic but emphasize the acute shortage of specialized technicians and extreme ultraviolet (EUV) lithography systems. WeAware's cross-source validation confirmed that while construction on three sites will begin immediately, full operational capacity is not expected until late 2029."
+      ],
+      sourcesBreakdown: { government: 20, media: 60, academic: 20 },
+      neutralityVectors: { left: 47, right: 53, bias: "Industry Consensus" }
+    },
+    "The Quiet Crisis in Long-Term Care Has Finally Reached Its Tipping Point": {
+      paragraphs: [
+        "Demographic realities are colliding with systemic underfunding in public healthcare systems as the first wave of the baby boomer generation enters their eighties. The deficit in long-term care beds, coupled with a severe shortage of certified nursing assistants, has created a silent emergency affecting millions of families globally.",
+        "Healthcare policies have historically prioritized acute care hospitals, leaving home-care subsidies and long-term residential facilities underfunded. The situation is exacerbated by high turnover rates among care workers, who face low wages and strenuous working conditions.",
+        "Analysts from the World Health Organization suggest that restructuring long-term care will require national social insurance programs to be redesigned. In the absence of major policy shifts, the burden of care will continue to fall disproportionately on unpaid family members, limiting economic productivity and worsening public health outcomes."
+      ],
+      sourcesBreakdown: { government: 40, media: 30, academic: 30 },
+      neutralityVectors: { left: 52, right: 48, bias: "Policy Analytical" }
+    },
+    "Why AI Governance Has Become a Hollow Phrase in International Diplomacy": {
+      paragraphs: [
+        "As multinational forums repeatedly publish non-binding declarations on AI ethics, the gulf between diplomatic rhetoric and state practice continues to widen. While communiqués celebrate 'human-centric' designs, military and economic realities dictate a quiet arms race in computing infrastructure and model capacity.",
+        "Strategic competition between major technological powers has made binding international treaties highly unlikely. Instead, AI governance is being weaponized as a tool of foreign policy, with states forming rival blocs to control export standards and compute resources.",
+        "Factual analysis of international security papers indicates that standardizing AI verification protocols is the only practical pathway to prevent systemic risks. Without concrete verification mechanisms—similar to nuclear non-proliferation frameworks—ethical declarations will remain largely symbolic."
+      ],
+      sourcesBreakdown: { government: 50, media: 25, academic: 25 },
+      neutralityVectors: { left: 49, right: 51, bias: "Geopolitical Realist" }
+    },
+    "Cities Are Repeating the Same Housing Mistakes From the 1970s, Again": {
+      paragraphs: [
+        "Municipal governments struggling with skyrocketing rents are increasingly turning back to rent stabilization and strict zoning regulations. However, historic data indicates these measures often suppress new construction, leading to long-term housing deficits that exacerbate the very affordability crises they were meant to solve.",
+        "The root cause of urban housing shortages remains restrictive zoning laws that protect low-density neighborhoods close to transit hubs. While rent caps provide short-term relief to current tenants, they disincentivize private developers from building the dense, mixed-use housing units necessary to meet modern urban demand.",
+        "Economists across both sides of the spectrum agree that housing supply elasticity is key to stabilizing urban living costs. Upzoning land, streamlining permit approvals, and providing targeted public housing subsidies represent the most viable path forward to sustainable housing security."
+      ],
+      sourcesBreakdown: { government: 35, media: 35, academic: 30 },
+      neutralityVectors: { left: 48, right: 52, bias: "Economic Consensus" }
+    }
+  };
+
+  return articleDb[headline] || defaultDetails;
+}
+
+function ArticlePage() {
+  const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  const article = ALL_ARTICLES.find(a => slugify(a.headline) === slug) as any;
+
+  useEffect(() => {
+    if (!article) {
+      navigate("/", { replace: true });
+    }
+  }, [article, navigate]);
+
+  if (!article) {
+    return null;
+  }
+
+  const details = getArticleDetails(article.headline);
+  const [bookmarked, setBookmarked] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <motion.div
+      className="min-h-screen bg-background text-foreground"
+      style={{ fontFamily: SANS }}
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -15 }}
+      transition={{ duration: 0.4 }}
+    >
+      {/* Top sticky navigation */}
+      <div className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
+        <div className="max-w-7xl mx-auto px-5 md:px-8 py-3 flex items-center justify-between">
+          <button
+            onClick={() => navigate("/")}
+            className="flex items-center gap-2 text-xs tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors font-medium animate-pulse hover:animate-none"
+            style={{ fontFamily: MONO }}
+          >
+            <ArrowLeft size={14} /> Back
+          </button>
+          
+          <span 
+            onClick={() => navigate("/")}
+            className="text-xl font-bold cursor-pointer hover:opacity-85 transition-opacity" 
+            style={{ fontFamily: SERIF }}
+          >
+            WeAware
+          </span>
+
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setBookmarked(!bookmarked)}
+              className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+              title="Bookmark Report"
+            >
+              <Bookmark size={15} className={bookmarked ? "fill-foreground text-foreground" : ""} />
+            </button>
+            <button 
+              onClick={handleShare}
+              className="p-2 text-muted-foreground hover:text-foreground transition-colors relative"
+              title="Copy Link"
+            >
+              {copied ? <Check size={15} className="text-emerald-500 animate-bounce" /> : <Share2 size={15} />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-5 md:px-8 py-10">
+        {/* Article Category & Title */}
+        <div className="max-w-4xl mb-8">
+          <span 
+            className="text-xs tracking-[0.2em] uppercase text-foreground font-semibold border-b-2 border-foreground pb-1"
+            style={{ fontFamily: MONO }}
+          >
+            {article.category}
+          </span>
+          
+          <h1 
+            className="mt-6 font-bold leading-tight tracking-tight text-foreground"
+            style={{ fontFamily: SERIF, fontSize: "clamp(2rem, 4vw, 3.2rem)" }}
+          >
+            {article.headline}
+          </h1>
+
+          <div className="mt-6 flex flex-wrap items-center gap-4 text-xs text-muted-foreground" style={{ fontFamily: MONO }}>
+            <div>
+              <span className="text-foreground font-semibold">{article.author}</span>
+              {article.role && <span className="opacity-60"> — {article.role}</span>}
+            </div>
+            <span>•</span>
+            <span>{article.date}</span>
+            <span>•</span>
+            <span className="flex items-center gap-1">
+              <CheckCircle size={12} className="text-foreground" /> {article.sources} Verified Sources
+            </span>
+          </div>
+        </div>
+
+        {/* Hero Image */}
+        {article.image && (
+          <div className="mb-10 aspect-[21/9] w-full bg-muted overflow-hidden border border-border">
+            <ImageWithFallback
+              src={article.image}
+              alt={article.headline}
+              className="w-full h-full object-cover grayscale opacity-90 hover:opacity-100 hover:grayscale-0 transition-all duration-700"
+            />
+          </div>
+        )}
+
+        {/* Content Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
+          {/* Main Body Column */}
+          <div className="lg:col-span-8 space-y-6">
+            {details.paragraphs.map((p, idx) => (
+              <p 
+                key={idx} 
+                className={`text-base md:text-lg leading-relaxed text-muted-foreground ${
+                  idx === 0 ? "first-letter:text-5xl first-letter:font-bold first-letter:text-foreground first-letter:mr-3 first-letter:float-left first-letter:font-serif first-letter:leading-none" : ""
+                }`}
+                style={{ fontFamily: SANS }}
+              >
+                {p}
+              </p>
+            ))}
+
+            <div className="pt-8 border-t border-border mt-8">
+              <h3 className="text-xs tracking-widest uppercase font-semibold text-foreground mb-4" style={{ fontFamily: MONO }}>
+                Factual Consensus Summary
+              </h3>
+              <p className="text-sm leading-relaxed text-muted-foreground italic bg-secondary p-5 border-l-4 border-foreground" style={{ fontFamily: SANS }}>
+                "WeAware's autonomous ingestion system gathered {article.sources} separate source datasets. Cross-checking algorithms resolved factual claims with a {article.neutrality}% match index. No signs of opinionated embellishment or artificial narrative pacing were introduced in the generation of this brief."
+              </p>
+            </div>
+          </div>
+
+          {/* Verification Sidebar Column */}
+          <div className="lg:col-span-4 space-y-6">
+            <div className="border border-border p-6 bg-secondary/50 backdrop-blur-sm space-y-6 sticky top-24">
+              <div>
+                <h3 className="text-xs tracking-[0.15em] uppercase font-bold text-foreground mb-4 border-b border-border pb-2" style={{ fontFamily: MONO }}>
+                  AI Audit Report
+                </h3>
+                
+                {/* Neutrality Index gauge */}
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground" style={{ fontFamily: MONO }}>Neutrality Score</span>
+                  <span className="text-sm font-bold text-foreground" style={{ fontFamily: MONO }}>{article.neutrality}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-border rounded-full overflow-hidden">
+                  <div className="h-full bg-foreground transition-all duration-1000" style={{ width: `${article.neutrality}%` }} />
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] tracking-widest uppercase text-muted-foreground block mb-2" style={{ fontFamily: MONO }}>
+                  Source Distribution
+                </span>
+                <div className="space-y-2 text-xs" style={{ fontFamily: MONO }}>
+                  <div className="flex justify-between">
+                    <span>Govt. / Official Records</span>
+                    <span className="font-semibold text-foreground">{details.sourcesBreakdown.government}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Independent Media</span>
+                    <span className="font-semibold text-foreground">{details.sourcesBreakdown.media}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Academic / Research</span>
+                    <span className="font-semibold text-foreground">{details.sourcesBreakdown.academic}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <span className="text-[10px] tracking-widest uppercase text-muted-foreground block mb-1" style={{ fontFamily: MONO }}>
+                  Verified Bias Vector
+                </span>
+                <div className="flex items-center gap-2 justify-between">
+                  <div className="text-sm font-bold text-foreground" style={{ fontFamily: SERIF }}>
+                    {details.neutralityVectors.bias}
+                  </div>
+                  <span className="text-[10px] bg-foreground text-background px-1.5 py-0.5 rounded uppercase font-semibold" style={{ fontFamily: MONO }}>
+                    Pass
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-[10px] text-muted-foreground/60 leading-normal pt-2 border-t border-border/40" style={{ fontFamily: MONO }}>
+                This report was verified autonomously using decentralized data consensus models. No editors or human intervention modified this analysis.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function HomeRouteWrapper() {
+  const [phase, setPhase] = useState<Phase>(() => {
+    const entered = sessionStorage.getItem("weaware_entered");
+    return entered === "true" ? "home" : "reveal";
+  });
+
+  const handleEnter = () => {
+    sessionStorage.setItem("weaware_entered", "true");
+    setPhase("home");
+  };
+
+  return (
+    <AnimatePresence mode="wait">
+      {phase === "intro"  && <IntroVideo   key="intro"  onComplete={() => setPhase("reveal")} />}
+      {phase === "reveal" && <RevealScreen key="reveal" onEnter={handleEnter} />}
+      {phase === "home"   && <HomePage     key="home" />}
+    </AnimatePresence>
+  );
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [phase, setPhase] = useState<Phase>("reveal");
   return (
-    <div>
-      <AnimatePresence mode="wait">
-        {phase === "intro"  && <IntroVideo   key="intro"  onComplete={() => setPhase("reveal")} />}
-        {phase === "reveal" && <RevealScreen key="reveal" onEnter={() => setPhase("home")} />}
-        {phase === "home"   && <HomePage     key="home" />}
-      </AnimatePresence>
-    </div>
+    <HashRouter>
+      <Routes>
+        <Route path="/" element={<HomeRouteWrapper />} />
+        <Route path="/article/:slug" element={<ArticlePage />} />
+      </Routes>
+    </HashRouter>
   );
 }
