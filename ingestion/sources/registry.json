@@ -1,0 +1,56 @@
+{
+  "sources": [
+    {"feed_id": "ap-top-news", "source_id": "associated-press", "source_name": "Associated Press", "url": "https://feeds.apnews.com/rss/apf-topnews", "region": "us", "type": "general", "paywall": false, "tier": "primary"},
+    {"feed_id": "npr-national", "source_id": "npr", "source_name": "NPR", "url": "https://feeds.npr.org/1001/rss.xml", "region": "us", "type": "general", "paywall": false, "tier": "primary"},
+    {"feed_id": "npr-world", "source_id": "npr", "source_name": "NPR", "url": "https://feeds.npr.org/1004/rss.xml", "region": "us", "type": "world", "paywall": false, "tier": "primary"},
+    {"feed_id": "nyt-homepage", "source_id": "new-york-times", "source_name": "New York Times", "url": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml", "region": "us", "type": "general", "paywall": true, "tier": "primary"},
+    {"feed_id": "nyt-world", "source_id": "new-york-times", "source_name": "New York Times", "url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml", "region": "us", "type": "world", "paywall": true, "tier": "primary"},
+    {"feed_id": "washington-post-world", "source_id": "washington-post", "source_name": "Washington Post", "url": "https://feeds.washingtonpost.com/rss/world", "region": "us", "type": "world", "paywall": true, "tier": "primary"},
+    {"feed_id": "cnn-world", "source_id": "cnn", "source_name": "CNN", "url": "http://rss.cnn.com/rss/edition_world.rss", "region": "us", "type": "world", "paywall": false, "tier": "primary"},
+    {"feed_id": "cbc-top-stories", "source_id": "cbc-news", "source_name": "CBC News", "url": "https://www.cbc.ca/webfeed/rss/rss-topstories", "region": "ca", "type": "general", "paywall": false, "tier": "primary"},
+    {"feed_id": "cbc-indigenous", "source_id": "cbc-news", "source_name": "CBC News", "url": "https://www.cbc.ca/webfeed/rss/rss-Indigenous", "region": "ca", "type": "society", "paywall": false, "tier": "secondary"},
+
+    {"feed_id": "bbc-world", "source_id": "bbc-news", "source_name": "BBC News", "url": "http://feeds.bbci.co.uk/news/world/rss.xml", "region": "uk", "type": "world", "paywall": false, "tier": "primary"},
+    {"feed_id": "bbc-technology", "source_id": "bbc-news", "source_name": "BBC News", "url": "http://feeds.bbci.co.uk/news/technology/rss.xml", "region": "uk", "type": "technology", "paywall": false, "tier": "secondary"},
+    {"feed_id": "guardian-world", "source_id": "the-guardian", "source_name": "The Guardian", "url": "https://www.theguardian.com/world/rss", "region": "uk", "type": "world", "paywall": false, "tier": "primary"},
+    {"feed_id": "dw-all", "source_id": "deutsche-welle", "source_name": "Deutsche Welle", "url": "https://rss.dw.com/rdf/rss-en-all", "region": "de", "type": "general", "paywall": false, "tier": "secondary"},
+    {"feed_id": "france24-en", "source_id": "france-24", "source_name": "France 24", "url": "https://www.france24.com/en/rss", "region": "fr", "type": "general", "paywall": false, "tier": "secondary"},
+    {"feed_id": "elpais-global", "source_id": "el-pais", "source_name": "El Pais", "url": "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada", "region": "es", "type": "general", "paywall": true, "tier": "secondary"},
+
+    {"feed_id": "aljazeera-all", "source_id": "al-jazeera", "source_name": "Al Jazeera", "url": "https://www.aljazeera.com/xml/rss/all.xml", "region": "middle-east", "type": "general", "paywall": false, "tier": "primary"},
+    {"feed_id": "folha-brazil", "source_id": "folha", "source_name": "Folha de S.Paulo", "url": "https://feeds.folha.uol.com.br/emcimadahora/rss091.xml", "region": "br", "type": "general", "paywall": true, "tier": "secondary"},
+
+    {"feed_id": "scmp-world", "source_id": "scmp", "source_name": "South China Morning Post", "url": "https://www.scmp.com/rss/5/feed", "region": "hk", "type": "world", "paywall": true, "tier": "primary"},
+    {"feed_id": "scmp-china", "source_id": "scmp", "source_name": "South China Morning Post", "url": "https://www.scmp.com/rss/4/feed", "region": "hk", "type": "china", "paywall": true, "tier": "primary"},
+    {"feed_id": "scmp-tech", "source_id": "scmp", "source_name": "South China Morning Post", "url": "https://www.scmp.com/rss/36/feed", "region": "hk", "type": "technology", "paywall": true, "tier": "secondary"},
+    {"feed_id": "the-hindu-home", "source_id": "the-hindu", "source_name": "The Hindu", "url": "https://www.thehindu.com/feeder/default.rss", "region": "in", "type": "general", "paywall": false, "tier": "primary"},
+    {"feed_id": "times-of-india-top", "source_id": "times-of-india", "source_name": "Times of India", "url": "http://timesofindia.indiatimes.com/rssfeedstopstories.cms", "region": "in", "type": "general", "paywall": false, "tier": "primary"},
+    {"feed_id": "indian-express-india", "source_id": "indian-express", "source_name": "Indian Express", "url": "https://indianexpress.com/section/india/feed/", "region": "in", "type": "national", "paywall": false, "tier": "secondary"},
+    {"feed_id": "indian-express-world", "source_id": "indian-express", "source_name": "Indian Express", "url": "https://indianexpress.com/section/world/feed/", "region": "in", "type": "world", "paywall": false, "tier": "secondary"},
+    {"feed_id": "hindustan-times-top", "source_id": "hindustan-times", "source_name": "Hindustan Times", "url": "https://www.hindustantimes.com/feeds/rss/top-news/rssfeed.xml", "region": "in", "type": "general", "paywall": false, "tier": "secondary"},
+    {"feed_id": "ndtv-top", "source_id": "ndtv", "source_name": "NDTV", "url": "https://feeds.feedburner.com/ndtvnews-top-stories", "region": "in", "type": "general", "paywall": false, "tier": "secondary"},
+    {"feed_id": "smh-general", "source_id": "sydney-morning-herald", "source_name": "Sydney Morning Herald", "url": "https://www.smh.com.au/rss/feed.xml", "region": "au", "type": "general", "paywall": true, "tier": "secondary"},
+    {"feed_id": "daily-star-frontpage", "source_id": "the-daily-star-bd", "source_name": "The Daily Star", "url": "https://www.thedailystar.net/frontpage/rss.xml", "region": "bd", "type": "general", "paywall": false, "tier": "secondary"},
+
+    {"feed_id": "ft-world", "source_id": "financial-times", "source_name": "Financial Times", "url": "https://www.ft.com/world?format=rss", "region": "uk", "type": "world", "paywall": true, "tier": "primary"},
+    {"feed_id": "ft-markets", "source_id": "financial-times", "source_name": "Financial Times", "url": "https://www.ft.com/markets?format=rss", "region": "uk", "type": "business", "paywall": true, "tier": "primary"},
+    {"feed_id": "wsj-world", "source_id": "wall-street-journal", "source_name": "Wall Street Journal", "url": "https://feeds.a.dj.com/rss/RSSWorldNews.xml", "region": "us", "type": "world", "paywall": true, "tier": "primary"},
+    {"feed_id": "wsj-markets", "source_id": "wall-street-journal", "source_name": "Wall Street Journal", "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml", "region": "us", "type": "business", "paywall": true, "tier": "primary"},
+    {"feed_id": "bloomberg-markets", "source_id": "bloomberg", "source_name": "Bloomberg", "url": "https://feeds.bloomberg.com/markets/news.rss", "region": "us", "type": "business", "paywall": true, "tier": "primary"},
+    {"feed_id": "bloomberg-technology", "source_id": "bloomberg", "source_name": "Bloomberg", "url": "https://feeds.bloomberg.com/technology/news.rss", "region": "us", "type": "technology", "paywall": true, "tier": "secondary"},
+    {"feed_id": "economist-latest", "source_id": "the-economist", "source_name": "The Economist", "url": "https://www.economist.com/latest/rss.xml", "region": "uk", "type": "general", "paywall": true, "tier": "secondary"},
+    {"feed_id": "livemint-news", "source_id": "livemint", "source_name": "Livemint", "url": "https://www.livemint.com/rss/news", "region": "in", "type": "business", "paywall": true, "tier": "secondary"},
+    {"feed_id": "economic-times-latest", "source_id": "the-economic-times", "source_name": "The Economic Times", "url": "https://economictimes.indiatimes.com/rssfeedsdefault.cms", "region": "in", "type": "business", "paywall": false, "tier": "secondary"},
+    {"feed_id": "business-standard-latest", "source_id": "business-standard", "source_name": "Business Standard", "url": "http://www.business-standard.com/rss/latest.rss", "region": "in", "type": "business", "paywall": false, "tier": "secondary"},
+    {"feed_id": "marketwatch-topstories", "source_id": "marketwatch", "source_name": "MarketWatch", "url": "https://www.marketwatch.com/rss/topstories", "region": "us", "type": "business", "paywall": false, "tier": "secondary"},
+    {"feed_id": "cnbc-world", "source_id": "cnbc", "source_name": "CNBC", "url": "https://www.cnbc.com/id/100727362/device/rss/rss.html", "region": "us", "type": "world", "paywall": false, "tier": "secondary"},
+
+    {"feed_id": "ars-technica", "source_id": "ars-technica", "source_name": "Ars Technica", "url": "http://feeds.arstechnica.com/arstechnica/index", "region": "us", "type": "technology", "paywall": false, "tier": "secondary"},
+    {"feed_id": "wired-rss", "source_id": "wired", "source_name": "Wired", "url": "https://www.wired.com/feed/rss", "region": "us", "type": "technology", "paywall": true, "tier": "secondary"},
+    {"feed_id": "techcrunch-feed", "source_id": "techcrunch", "source_name": "TechCrunch", "url": "https://techcrunch.com/feed/", "region": "us", "type": "technology", "paywall": false, "tier": "secondary"},
+    {"feed_id": "the-verge-rss", "source_id": "the-verge", "source_name": "The Verge", "url": "https://www.theverge.com/rss/index.xml", "region": "us", "type": "technology", "paywall": false, "tier": "secondary"},
+    {"feed_id": "krebs-security", "source_id": "krebs-on-security", "source_name": "Krebs on Security", "url": "https://krebsonsecurity.com/feed", "region": "us", "type": "security", "paywall": false, "tier": "secondary"},
+
+    {"feed_id": "reuters-bridge-google-news", "source_id": "reuters", "source_name": "Reuters", "url": "https://news.google.com/rss/search?q=when:24h+allinurl:reuters.com", "region": "global", "type": "wire", "paywall": false, "tier": "primary"}
+  ]
+}

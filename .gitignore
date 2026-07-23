@@ -1,2 +1,5 @@
 .venv/
 weaware_items.json
+.env
+__pycache__/
+items.db
