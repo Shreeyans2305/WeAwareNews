@@ -1,10 +1,10 @@
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
-def load_dotenv(path: Path | None = None) -> None:
+def load_dotenv(path: Optional[Path] = None) -> None:
     env_path = path or (Path.cwd() / ".env")
     if not env_path.exists():
         return

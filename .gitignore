@@ -1,5 +1,16 @@
+# Python
 .venv/
-weaware_items.json
-.env
 __pycache__/
-items.db
+*.pyc
+*.pyo
+
+# Environment
+.env
+
+# Databases (generated artifacts — not source)
+*.db
+*.db-wal
+*.db-shm
+
+# Legacy pipeline output (no longer generated)
+weaware_items.json

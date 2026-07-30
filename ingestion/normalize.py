@@ -1,72 +1,87 @@
-import hashlib
-import re
-from datetime import UTC, datetime
-from typing import Dict, Iterable, List
-from urllib.parse import urlparse, urlunparse
+"""
+Normalisation and intra-source deduplication for the WeAware ingestion pipeline.
+
+normalize_items() converts heterogeneous raw dicts (from any adapter) into a
+single canonical schema. dedup_intra_source() removes URL-level duplicates
+within the same source within one fetch cycle.
+"""
+
+from datetime import datetime
+from typing import Dict, Iterable, List, Optional
+
+from ingestion.utils import UTC, canonicalize_url, normalize_text, normalize_iso, stable_item_hash
+
+# Items with fewer than this many words in raw_text are flagged as 'short'
+SHORT_TEXT_WORD_THRESHOLD = 20
 
 
-def _canonicalize_url(url: str) -> str:
-    parsed = urlparse(url.strip())
-    path = parsed.path.rstrip("/")
-    return urlunparse((parsed.scheme.lower(), parsed.netloc.lower(), path, "", parsed.query, ""))
+def _extraction_status(raw_text: str) -> str:
+    """Classify the extraction quality of a raw-text field."""
+    if not raw_text:
+        return "failed"
+    if len(raw_text.split()) < SHORT_TEXT_WORD_THRESHOLD:
+        return "short"
+    return "ok"
 
 
-def _normalize_iso(value: str | None) -> str | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC).isoformat()
-    except ValueError:
-        return None
+def normalize_items(raw_items: Iterable[Dict]) -> List[Dict]:
+    """
+    Normalise raw items from any adapter into the unified pipeline schema.
 
-
-def _normalize_text(value: str | None) -> str:
-    if not value:
-        return ""
-    return re.sub(r"\s+", " ", value).strip()
-
-
-def normalize_items(raw_items: Iterable[Dict[str, object]]) -> List[Dict[str, object]]:
+    Items missing a source_id, source_name, or url are silently dropped
+    (they cannot be meaningfully stored or deduplicated without those keys).
+    """
     now_iso = datetime.now(UTC).isoformat()
-    normalized: List[Dict[str, object]] = []
+    normalized: List[Dict] = []
 
     for item in raw_items:
-        source_name = _normalize_text(str(item.get("source_name") or ""))
-        url = _canonicalize_url(str(item.get("url") or ""))
-        if not source_name or not url:
+        source_name = normalize_text(str(item.get("source_name") or ""))
+        url = canonicalize_url(str(item.get("url") or ""))
+        source_id = normalize_text(str(item.get("source_id") or ""))
+
+        if not source_name or not url or not source_id:
             continue
 
-        source_id = _normalize_text(str(item.get("source_id") or ""))
-        if not source_id:
-            continue
+        raw_text = normalize_text(str(item.get("raw_text") or ""))
 
-        normalized_item: Dict[str, object] = {
+        normalized_item: Dict = {
             "source_id": source_id,
             "source_name": source_name,
-            "source_type": _normalize_text(str(item.get("source_type") or "unknown")),
-            "region": _normalize_text(str(item.get("region") or "global")),
+            "source_type": normalize_text(str(item.get("source_type") or "unknown")),
+            "region": normalize_text(str(item.get("region") or "global")),
             "url": url,
-            "title": _normalize_text(str(item.get("title") or "")),
-            "raw_text": _normalize_text(str(item.get("raw_text") or "")),
-            "published_at": _normalize_iso(str(item.get("published_at") or "")),
-            "fetched_at": _normalize_iso(str(item.get("fetched_at") or "")) or now_iso,
-            "author": _normalize_text(str(item.get("author") or "")) or None,
-            "lang": _normalize_text(str(item.get("lang") or "en")),
+            "title": normalize_text(str(item.get("title") or "")),
+            "raw_text": raw_text,
+            "published_at": normalize_iso(str(item.get("published_at") or "")),
+            "fetched_at": normalize_iso(str(item.get("fetched_at") or "")) or now_iso,
+            "author": normalize_text(str(item.get("author") or "")) or None,
+            "lang": normalize_text(str(item.get("lang") or "en")),
             "paywall": bool(item.get("paywall", False)),
             "is_social": bool(item.get("is_social", False)),
+            "extraction_status": _extraction_status(raw_text),
+            # Populated by the clustering stage in run_stage1.py
+            "story_id": None,
             "has_cross_source_corroboration": False,
         }
+        # Attach the stable hash so downstream code can reference it
+        normalized_item["item_hash"] = stable_item_hash(source_id, url)
         normalized.append(normalized_item)
 
     return normalized
 
 
-def dedup_intra_source(items: Iterable[Dict[str, object]]) -> List[Dict[str, object]]:
-    deduped: Dict[tuple[str, str], Dict[str, object]] = {}
+def dedup_intra_source(items: Iterable[Dict]) -> List[Dict]:
+    """
+    Remove URL-level duplicates within the same source within one fetch cycle.
+
+    When two items share (source_id, canonical_url), keep the one with the
+    longer raw_text (richer content wins).
+    """
+    deduped: Dict[tuple, Dict] = {}
 
     for item in items:
         source_id = str(item["source_id"])
-        canonical_url = _canonicalize_url(str(item["url"]))
+        canonical_url = canonicalize_url(str(item["url"]))
         key = (source_id, canonical_url)
 
         existing = deduped.get(key)
@@ -74,13 +89,7 @@ def dedup_intra_source(items: Iterable[Dict[str, object]]) -> List[Dict[str, obj
             deduped[key] = item
             continue
 
-        existing_text_len = len(str(existing.get("raw_text") or ""))
-        candidate_text_len = len(str(item.get("raw_text") or ""))
-        if candidate_text_len > existing_text_len:
+        if len(str(item.get("raw_text") or "")) > len(str(existing.get("raw_text") or "")):
             deduped[key] = item
 
     return list(deduped.values())
-
-
-def stable_item_hash(source_id: str, url: str) -> str:
-    return hashlib.sha256(f"{source_id}|{_canonicalize_url(url)}".encode("utf-8")).hexdigest()
