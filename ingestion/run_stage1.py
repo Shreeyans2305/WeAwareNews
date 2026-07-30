@@ -1,6 +1,22 @@
+"""
+WeAware Ingestion Pipeline — Stage 1
+
+Execution order:
+  1. Fetch   — pull raw items from RSS feeds, commercial news APIs, and Bluesky
+  2. Normalise — coerce all items to the unified schema; compute item_hash
+  3. Dedup   — drop URL-level duplicates within the same source
+  4. Cluster  — group items that likely cover the same story (title word-overlap)
+  5. Persist  — upsert stories, items, and poll state into items.db
+  6. Flag     — insert items with short/failed extraction into the review queue
+
+Run:
+  python -m ingestion.run_stage1
+"""
+
 from ingestion.adapters.bluesky_adapter import BlueskyAdapter
 from ingestion.adapters.newsapi_adapter import NewsAPIAdapter
 from ingestion.adapters.rss_adapter import RSSAdapter
+from ingestion.cluster import cluster_items
 from ingestion.config import load_settings
 from ingestion.normalize import dedup_intra_source, normalize_items
 from ingestion.store.sqlite_store import SQLiteIngestionStore
@@ -11,7 +27,11 @@ def run() -> None:
     store = SQLiteIngestionStore(settings.sqlite_path)
     store.initialize()
 
+    # ------------------------------------------------------------------ #
+    # 1. Fetch
+    # ------------------------------------------------------------------ #
     last_poll_state = store.get_poll_state()
+
     rss_adapter = RSSAdapter(
         registry_path=settings.registry_path,
         request_timeout_seconds=settings.request_timeout_seconds,
@@ -29,24 +49,67 @@ def run() -> None:
         keywords=settings.bluesky_keywords,
     )
 
-    rss_raw_items, rss_poll_updates, rss_errors = rss_adapter.fetch(last_poll_state)
-    api_raw_items, api_errors = news_api_adapter.fetch()
-    bluesky_raw_items, bluesky_errors = bluesky_adapter.fetch()
+    rss_raw, rss_poll_updates, rss_errors = rss_adapter.fetch(last_poll_state)
+    api_raw, api_errors = news_api_adapter.fetch()
+    bluesky_raw, bluesky_errors = bluesky_adapter.fetch()
 
-    normalized = normalize_items(rss_raw_items + api_raw_items + bluesky_raw_items)
+    # ------------------------------------------------------------------ #
+    # 2. Normalise
+    # ------------------------------------------------------------------ #
+    normalized = normalize_items(rss_raw + api_raw + bluesky_raw)
+
+    # ------------------------------------------------------------------ #
+    # 3. Dedup (intra-source, same URL)
+    # ------------------------------------------------------------------ #
     deduped = dedup_intra_source(normalized)
 
+    # ------------------------------------------------------------------ #
+    # 4. Cluster (cross-source story grouping)
+    # ------------------------------------------------------------------ #
+    stories, item_to_story = cluster_items(deduped)
+
+    # Stamp story_id and corroboration flag onto each item
+    for item in deduped:
+        story_id = item_to_story.get(str(item["item_hash"]))
+        item["story_id"] = story_id
+        # An item is corroborated when its story has contributions from
+        # more than one distinct source_id
+        story = next((s for s in stories if s["story_id"] == story_id), None)
+        item["has_cross_source_corroboration"] = bool(
+            story and story["source_count"] > 1
+        )
+
+    # ------------------------------------------------------------------ #
+    # 5. Persist
+    # ------------------------------------------------------------------ #
+    store.upsert_stories(stories)
     inserted_or_updated = store.upsert_items(deduped)
     store.upsert_poll_state(rss_poll_updates)
 
+    # ------------------------------------------------------------------ #
+    # 6. Flag for review
+    # ------------------------------------------------------------------ #
+    store.flag_for_review(deduped)
+
+    # ------------------------------------------------------------------ #
+    # Summary
+    # ------------------------------------------------------------------ #
+    multi_source_stories = sum(1 for s in stories if s["source_count"] > 1)
+    corroborated = sum(1 for i in deduped if i.get("has_cross_source_corroboration"))
+
     print(
-        "Stage 1 ingestion completed: "
-        f"rss={len(rss_raw_items)} api={len(api_raw_items)} bluesky={len(bluesky_raw_items)} "
-        f"normalized={len(normalized)} deduped={len(deduped)} persisted={inserted_or_updated}"
+        "Stage 1 ingestion completed:\n"
+        f"  fetched  : rss={len(rss_raw)}  api={len(api_raw)}  bluesky={len(bluesky_raw)}\n"
+        f"  pipeline : normalized={len(normalized)}  deduped={len(deduped)}  persisted={inserted_or_updated}\n"
+        f"  clusters : stories={len(stories)}  multi-source={multi_source_stories}  corroborated_items={corroborated}\n"
+        f"  db       : {settings.sqlite_path}"
     )
 
-    for error in rss_errors + api_errors + bluesky_errors:
-        print(f"[ingestion-warning] {error}")
+    all_errors = rss_errors + api_errors + bluesky_errors
+    if all_errors:
+        print(f"\n  warnings ({len(all_errors)}):")
+        for error in all_errors:
+            print(f"    [warn] {error}")
 
 
 if __name__ == "__main__":

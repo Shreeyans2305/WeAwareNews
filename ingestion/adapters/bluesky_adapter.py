@@ -1,16 +1,24 @@
+"""
+Bluesky adapter for the WeAware ingestion pipeline.
+
+Fetches posts from:
+  - Curated accounts (app.bsky.feed.getAuthorFeed)
+  - Keyword searches  (app.bsky.feed.searchPosts)
+
+Authenticates via BLUESKY_HANDLE + BLUESKY_APP_PASSWORD env vars when
+present; falls back to unauthenticated public API endpoints otherwise.
+"""
+
 import json
 import os
-import re
+from datetime import datetime
+from http.client import IncompleteRead, RemoteDisconnected
+from typing import Dict, List, Optional, Tuple
+from urllib.error import HTTPError, URLError
 import urllib.parse
 import urllib.request
-from datetime import UTC, datetime
-from typing import Dict, List
-from urllib.error import HTTPError, URLError
 
-
-def _slugify(value: str) -> str:
-    lowered = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
-    return lowered or "bluesky-unknown"
+from ingestion.utils import UTC, slugify
 
 
 class BlueskyAdapter:
@@ -28,54 +36,77 @@ class BlueskyAdapter:
         self.authenticated_base_url = "https://bsky.social/xrpc"
         self.public_base_url = "https://api.bsky.app/xrpc"
 
-    def _post_json(self, endpoint: str, body: Dict[str, str]) -> Dict[str, object]:
+    # ------------------------------------------------------------------
+    # HTTP helpers
+    # ------------------------------------------------------------------
+
+    def _post_json(self, endpoint: str, body: Dict, base_url: str) -> Dict:
         payload = json.dumps(body).encode("utf-8")
         request = urllib.request.Request(
-            f"{self.base_url}/{endpoint}",
+            f"{base_url}/{endpoint}",
             data=payload,
             method="POST",
-            headers={"Content-Type": "application/json", "User-Agent": "WeAwareIngestion/1.0 (+Bluesky)"},
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "WeAwareIngestion/1.0 (+Bluesky)",
+            },
         )
         with urllib.request.urlopen(request, timeout=self.request_timeout_seconds) as response:
             return json.loads(response.read().decode("utf-8"))
 
     def _get_json(
-        self, endpoint: str, params: Dict[str, str], token: str | None = None, base_url: str | None = None
-    ) -> Dict[str, object]:
+        self,
+        endpoint: str,
+        params: Dict,
+        token: Optional[str] = None,
+        base_url: Optional[str] = None,
+    ) -> Dict:
         query = urllib.parse.urlencode(params)
         url_base = base_url or self.authenticated_base_url
         headers = {"User-Agent": "WeAwareIngestion/1.0 (+Bluesky)"}
         if token:
             headers["Authorization"] = f"Bearer {token}"
         request = urllib.request.Request(
-            f"{url_base}/{endpoint}?{query}",
-            headers=headers,
+            f"{url_base}/{endpoint}?{query}", headers=headers
         )
         with urllib.request.urlopen(request, timeout=self.request_timeout_seconds) as response:
             return json.loads(response.read().decode("utf-8"))
 
+    # ------------------------------------------------------------------
+    # Auth
+    # ------------------------------------------------------------------
+
+    def _login(self, base_url: str) -> str:
+        handle = os.getenv("BLUESKY_HANDLE", "").strip()
+        app_password = os.getenv("BLUESKY_APP_PASSWORD", "").strip()
+        if not handle or not app_password:
+            return ""
+        response = self._post_json(
+            "com.atproto.server.createSession",
+            {"identifier": handle, "password": app_password},
+            base_url=base_url,
+        )
+        return str(response.get("accessJwt") or "")
+
+    # ------------------------------------------------------------------
+    # Item construction
+    # ------------------------------------------------------------------
+
     def _build_post_url(self, handle: str, uri: str) -> str:
-        segments = uri.split("/")
-        rkey = segments[-1] if segments else ""
+        rkey = uri.split("/")[-1] if uri else ""
         return f"https://bsky.app/profile/{handle}/post/{rkey}"
 
-    def _extract_text(self, post: Dict[str, object]) -> str:
-        record = post.get("record") if isinstance(post.get("record"), dict) else {}
-        return str(record.get("text") or "").strip()
-
-    def _to_item(self, post: Dict[str, object], fallback_source_name: str, fetched_at: str) -> Dict[str, object]:
+    def _to_item(self, post: Dict, fallback_source_name: str, fetched_at: str) -> Dict:
         author = post.get("author") if isinstance(post.get("author"), dict) else {}
         handle = str(author.get("handle") or fallback_source_name)
         source_name = str(author.get("displayName") or handle)
         uri = str(post.get("uri") or "")
-        text = self._extract_text(post)
-        created_at = None
         record = post.get("record") if isinstance(post.get("record"), dict) else {}
-        if record:
-            created_at = record.get("createdAt")
+        text = str(record.get("text") or "").strip()
+        created_at = record.get("createdAt") if record else None
 
         return {
-            "source_id": f"bluesky-{_slugify(handle)}",
+            "source_id": f"bluesky-{slugify(handle)}",
             "source_name": source_name,
             "source_type": "bluesky",
             "region": "global",
@@ -90,31 +121,30 @@ class BlueskyAdapter:
             "is_social": True,
         }
 
-    def _login(self) -> str:
-        handle = os.getenv("BLUESKY_HANDLE", "").strip()
-        app_password = os.getenv("BLUESKY_APP_PASSWORD", "").strip()
-        if not handle or not app_password:
-            return ""
-        response = self._post_json(
-            "com.atproto.server.createSession",
-            {"identifier": handle, "password": app_password},
-        )
-        return str(response.get("accessJwt") or "")
+    # ------------------------------------------------------------------
+    # Public fetch
+    # ------------------------------------------------------------------
 
-    def fetch(self) -> tuple[List[Dict[str, object]], List[str]]:
+    _NETWORK_ERRORS = (
+        HTTPError, URLError, TimeoutError, json.JSONDecodeError,
+        ValueError, RemoteDisconnected, IncompleteRead,
+    )
+
+    def fetch(self) -> Tuple[List[Dict], List[str]]:
         errors: List[str] = []
         token = ""
         base_url = self.public_base_url
+
         if os.getenv("BLUESKY_HANDLE", "").strip() and os.getenv("BLUESKY_APP_PASSWORD", "").strip():
             try:
-                token = self._login()
+                token = self._login(self.authenticated_base_url)
                 if token:
                     base_url = self.authenticated_base_url
-            except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError) as error:
+            except self._NETWORK_ERRORS as error:
                 errors.append(f"Bluesky login failed, continuing unauthenticated: {error}")
 
         fetched_at = datetime.now(UTC).isoformat()
-        items: List[Dict[str, object]] = []
+        items: List[Dict] = []
 
         for handle in self.curated_accounts:
             try:
@@ -124,7 +154,7 @@ class BlueskyAdapter:
                     token=token or None,
                     base_url=base_url,
                 )
-            except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError) as error:
+            except self._NETWORK_ERRORS as error:
                 errors.append(f"Bluesky author feed failed for {handle}: {error}")
                 continue
 
@@ -146,7 +176,7 @@ class BlueskyAdapter:
                     token=token or None,
                     base_url=base_url,
                 )
-            except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError) as error:
+            except self._NETWORK_ERRORS as error:
                 errors.append(f"Bluesky keyword search failed for '{keyword}': {error}")
                 continue
 

@@ -1,38 +1,23 @@
+"""
+RSS adapter for the WeAware ingestion pipeline.
+
+Uses feedparser (feedparser-6.x) for robust RSS/Atom parsing — the same
+library that powered the original WeAware prototype. The polling-state and
+tier-interval logic from the modern pipeline is preserved so feeds are only
+re-fetched when their interval has elapsed.
+
+Source metadata (region, tier, paywall, etc.) comes from
+ingestion/sources/registry.json so the feed list is managed in one place.
+"""
+
 import json
-import re
-import urllib.request
-import xml.etree.ElementTree as ET
-from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
-from urllib.error import HTTPError, URLError
+from typing import Dict, List, Optional, Tuple
 
+import feedparser  # type: ignore[import]
 
-def _strip_html(value: str) -> str:
-    return re.sub(r"<[^>]+>", " ", value or "").strip()
-
-
-def _parse_datetime(value: str | None) -> Optional[str]:
-    if not value:
-        return None
-    try:
-        return parsedate_to_datetime(value).astimezone(UTC).isoformat()
-    except (TypeError, ValueError):
-        pass
-
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC).isoformat()
-    except ValueError:
-        return None
-
-
-def _xml_text(parent: ET.Element, tags: List[str]) -> str:
-    for tag in tags:
-        node = parent.find(tag)
-        if node is not None and node.text:
-            return node.text.strip()
-    return ""
+from ingestion.utils import UTC, normalize_text, strip_html
 
 
 class RSSAdapter:
@@ -43,19 +28,27 @@ class RSSAdapter:
         max_items_per_source: int,
         tier_intervals_seconds: Dict[str, int],
     ) -> None:
-        self.registry_path = registry_path
         self.request_timeout_seconds = request_timeout_seconds
         self.max_items_per_source = max_items_per_source
         self.tier_intervals_seconds = tier_intervals_seconds
-        self.sources = self._load_sources()
+        self.sources = self._load_sources(registry_path)
 
-    def _load_sources(self) -> List[Dict[str, object]]:
-        data = json.loads(self.registry_path.read_text(encoding="utf-8"))
+    # ------------------------------------------------------------------
+    # Source registry
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _load_sources(registry_path: Path) -> List[Dict]:
+        data = json.loads(registry_path.read_text(encoding="utf-8"))
         return data["sources"]
+
+    # ------------------------------------------------------------------
+    # Polling-interval gate
+    # ------------------------------------------------------------------
 
     def _due_for_poll(
         self,
-        source: Dict[str, object],
+        source: Dict,
         now_utc: datetime,
         last_polled_at_by_feed_id: Dict[str, str],
     ) -> bool:
@@ -70,66 +63,78 @@ class RSSAdapter:
         elapsed_seconds = (now_utc - last_polled_dt).total_seconds()
         return elapsed_seconds >= interval
 
-    def _parse_feed_items(self, xml_bytes: bytes) -> List[Dict[str, str | None]]:
-        root = ET.fromstring(xml_bytes)
-        items: List[Dict[str, str | None]] = []
+    # ------------------------------------------------------------------
+    # Feed parsing (feedparser)
+    # ------------------------------------------------------------------
 
-        channel = root.find("channel")
-        if channel is not None:
-            nodes = channel.findall("item")
-            for node in nodes:
-                items.append(
-                    {
-                        "title": _xml_text(node, ["title"]),
-                        "link": _xml_text(node, ["link"]),
-                        "summary": _strip_html(_xml_text(node, ["description"])),
-                        "author": _xml_text(
-                            node, ["author", "{http://purl.org/dc/elements/1.1/}creator"]
-                        ),
-                        "published_at": _parse_datetime(
-                            _xml_text(node, ["pubDate", "{http://purl.org/dc/elements/1.1/}date"])
-                        ),
-                        "lang": _xml_text(node, ["{http://www.w3.org/XML/1998/namespace}lang"]),
-                    }
-                )
-            return items
+    def _parse_feed(self, url: str) -> Tuple[List[Dict], Optional[str]]:
+        """
+        Fetch and parse one feed URL with feedparser.
 
-        atom_entries = root.findall("{http://www.w3.org/2005/Atom}entry")
-        for entry in atom_entries:
-            link = ""
-            link_node = entry.find("{http://www.w3.org/2005/Atom}link")
-            if link_node is not None:
-                link = (link_node.attrib.get("href") or "").strip()
+        Returns (entries, error_message_or_None).
+        feedparser handles both RSS 2.0 and Atom transparently.
+        """
+        parsed = feedparser.parse(
+            url,
+            request_headers={"User-Agent": "WeAwareIngestion/1.0 (+RSS Poller)"},
+            agent="WeAwareIngestion/1.0 (+RSS Poller)",
+        )
 
-            summary = _xml_text(entry, ["{http://www.w3.org/2005/Atom}summary"])
-            if not summary:
-                summary = _xml_text(entry, ["{http://www.w3.org/2005/Atom}content"])
-            items.append(
+        http_status = parsed.get("status", 200)
+        if http_status and http_status >= 400:
+            return [], f"HTTP {http_status}"
+
+        if parsed.bozo and not parsed.entries:
+            return [], f"Parse error: {parsed.bozo_exception}"
+
+        entries: List[Dict] = []
+        for entry in parsed.entries:
+            published = entry.get("published_parsed") or entry.get("updated_parsed")
+            published_iso: Optional[str] = None
+            if published:
+                try:
+                    published_iso = datetime(*published[:6], tzinfo=UTC).isoformat()
+                except (TypeError, ValueError):
+                    published_iso = None
+
+            # Prefer content > summary for raw_text
+            raw_text = ""
+            if entry.get("content"):
+                raw_text = strip_html(entry["content"][0].get("value", ""))
+            if not raw_text:
+                raw_text = strip_html(entry.get("summary", ""))
+
+            entries.append(
                 {
-                    "title": _xml_text(entry, ["{http://www.w3.org/2005/Atom}title"]),
-                    "link": link,
-                    "summary": _strip_html(summary),
-                    "author": _xml_text(entry, ["{http://www.w3.org/2005/Atom}author"]),
-                    "published_at": _parse_datetime(
-                        _xml_text(
-                            entry,
-                            [
-                                "{http://www.w3.org/2005/Atom}published",
-                                "{http://www.w3.org/2005/Atom}updated",
-                            ],
-                        )
-                    ),
-                    "lang": "",
+                    "title": normalize_text(entry.get("title", "")),
+                    "link": entry.get("link", ""),
+                    "raw_text": raw_text,
+                    "author": entry.get("author") or None,
+                    "published_at": published_iso,
+                    "lang": entry.get("language") or "",
                 }
             )
-        return items
+
+        return entries, None
+
+    # ------------------------------------------------------------------
+    # Public fetch
+    # ------------------------------------------------------------------
 
     def fetch(
         self, last_polled_at_by_feed_id: Dict[str, str]
-    ) -> tuple[List[Dict[str, object]], Dict[str, str], List[str]]:
+    ) -> Tuple[List[Dict], Dict[str, str], List[str]]:
+        """
+        Fetch all due RSS feeds.
+
+        Returns:
+            raw_items   – list of normalised-ish item dicts
+            poll_updates – feed_id → fetched_at timestamp (for poll-state table)
+            errors       – list of human-readable warning strings
+        """
         now_utc = datetime.now(UTC)
         fetched_at = now_utc.isoformat()
-        raw_items: List[Dict[str, object]] = []
+        raw_items: List[Dict] = []
         poll_updates: Dict[str, str] = {}
         errors: List[str] = []
 
@@ -137,39 +142,30 @@ class RSSAdapter:
             if not self._due_for_poll(source, now_utc, last_polled_at_by_feed_id):
                 continue
 
-            request = urllib.request.Request(
-                str(source["url"]),
-                headers={"User-Agent": "WeAwareIngestion/1.0 (+RSS Poller)"},
-            )
+            entries, error = self._parse_feed(str(source["url"]))
+            poll_updates[str(source["feed_id"])] = fetched_at
 
-            feed_entries: List[Dict[str, str | None]] = []
-            try:
-                with urllib.request.urlopen(request, timeout=self.request_timeout_seconds) as response:
-                    feed_entries = self._parse_feed_items(response.read())
-            except (HTTPError, URLError, TimeoutError, ET.ParseError, UnicodeDecodeError) as error:
+            if error:
                 errors.append(f"RSS fetch failed for {source['feed_id']}: {error}")
-                poll_updates[str(source["feed_id"])] = fetched_at
                 continue
 
-            for entry in feed_entries[: self.max_items_per_source]:
+            for entry in entries[: self.max_items_per_source]:
                 raw_items.append(
                     {
                         "source_id": source["source_id"],
                         "source_name": source["source_name"],
                         "source_type": "rss",
-                        "region": source["region"],
+                        "region": source.get("region", "global"),
                         "url": entry.get("link", "") or "",
                         "title": entry.get("title", "") or "",
-                        "raw_text": entry.get("summary", "") or "",
+                        "raw_text": entry.get("raw_text", "") or "",
                         "published_at": entry.get("published_at"),
                         "fetched_at": fetched_at,
                         "author": entry.get("author") or None,
-                        "lang": (entry.get("lang") or "en"),
-                        "paywall": bool(source["paywall"]),
+                        "lang": entry.get("lang") or "en",
+                        "paywall": bool(source.get("paywall", False)),
                         "is_social": False,
                     }
                 )
-
-            poll_updates[str(source["feed_id"])] = fetched_at
 
         return raw_items, poll_updates, errors

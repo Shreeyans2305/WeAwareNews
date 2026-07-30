@@ -1,17 +1,28 @@
+"""
+NewsAPI adapter — aggregates items from multiple commercial news API providers.
+
+Each provider is implemented as a NewsAPIClient subclass. The adapter tries
+every enabled client (gated by env-var API keys) and collects their results
+into the unified raw-item schema.
+
+Supported providers:
+  - Currents API  (CURRENTS_API_KEY)
+  - World News API (WORLD_NEWS_API)
+  - GNews          (GNEWS_API)
+  - Webz.io        (WEBZ_API)
+"""
+
 import json
 import os
-import re
+from abc import ABC, abstractmethod
+from datetime import datetime
+from http.client import IncompleteRead, RemoteDisconnected
+from typing import Dict, Iterable, List, Tuple
+from urllib.error import HTTPError, URLError
 import urllib.parse
 import urllib.request
-from abc import ABC, abstractmethod
-from datetime import UTC, datetime
-from typing import Dict, Iterable, List
-from urllib.error import HTTPError, URLError
 
-
-def _slugify(value: str) -> str:
-    lowered = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
-    return lowered or "unknown-source"
+from ingestion.utils import UTC, slugify
 
 
 class NewsAPIClient(ABC):
@@ -29,13 +40,15 @@ class NewsAPIClient(ABC):
     def enabled(self) -> bool:
         return bool(self.api_key)
 
-    def _request_json(self, url: str) -> Dict[str, object]:
-        request = urllib.request.Request(url, headers={"User-Agent": "WeAwareIngestion/1.0 (+NewsAPI)"})
+    def _request_json(self, url: str) -> Dict:
+        request = urllib.request.Request(
+            url, headers={"User-Agent": "WeAwareIngestion/1.0 (+NewsAPI)"}
+        )
         with urllib.request.urlopen(request, timeout=self.request_timeout_seconds) as response:
             return json.loads(response.read().decode("utf-8"))
 
     @abstractmethod
-    def fetch(self, fetched_at: str) -> List[Dict[str, object]]:
+    def fetch(self, fetched_at: str) -> List[Dict]:
         raise NotImplementedError
 
 
@@ -43,26 +56,21 @@ class CurrentsClient(NewsAPIClient):
     env_key_name = "CURRENTS_API_KEY"
     source_type_name = "news_api_currents"
 
-    def fetch(self, fetched_at: str) -> List[Dict[str, object]]:
-        query = urllib.parse.urlencode(
-            {
-                "apiKey": self.api_key,
-                "language": "en",
-            }
-        )
+    def fetch(self, fetched_at: str) -> List[Dict]:
+        query = urllib.parse.urlencode({"apiKey": self.api_key, "language": "en"})
         payload = self._request_json(f"https://api.currentsapi.services/v1/latest-news?{query}")
         records = payload.get("news", [])
         if not isinstance(records, list):
             return []
 
-        items: List[Dict[str, object]] = []
+        items: List[Dict] = []
         for article in records:
             if not isinstance(article, dict):
                 continue
             publisher = str(article.get("author") or "Currents")
             items.append(
                 {
-                    "source_id": _slugify(publisher),
+                    "source_id": slugify(publisher),
                     "source_name": publisher,
                     "source_type": self.source_type_name,
                     "region": "global",
@@ -84,7 +92,7 @@ class WorldNewsClient(NewsAPIClient):
     env_key_name = "WORLD_NEWS_API"
     source_type_name = "news_api_world_news"
 
-    def fetch(self, fetched_at: str) -> List[Dict[str, object]]:
+    def fetch(self, fetched_at: str) -> List[Dict]:
         query = urllib.parse.urlencode(
             {
                 "api-key": self.api_key,
@@ -99,14 +107,14 @@ class WorldNewsClient(NewsAPIClient):
         if not isinstance(records, list):
             return []
 
-        items: List[Dict[str, object]] = []
+        items: List[Dict] = []
         for article in records:
             if not isinstance(article, dict):
                 continue
             source_name = str(article.get("source") or article.get("news_site") or "World News API")
             items.append(
                 {
-                    "source_id": _slugify(source_name),
+                    "source_id": slugify(source_name),
                     "source_name": source_name,
                     "source_type": self.source_type_name,
                     "region": "global",
@@ -128,7 +136,7 @@ class GNewsClient(NewsAPIClient):
     env_key_name = "GNEWS_API"
     source_type_name = "news_api_gnews"
 
-    def fetch(self, fetched_at: str) -> List[Dict[str, object]]:
+    def fetch(self, fetched_at: str) -> List[Dict]:
         query = urllib.parse.urlencode(
             {
                 "token": self.api_key,
@@ -142,7 +150,7 @@ class GNewsClient(NewsAPIClient):
         if not isinstance(records, list):
             return []
 
-        items: List[Dict[str, object]] = []
+        items: List[Dict] = []
         for article in records:
             if not isinstance(article, dict):
                 continue
@@ -150,7 +158,7 @@ class GNewsClient(NewsAPIClient):
             source_name = str(source.get("name") or "GNews")
             items.append(
                 {
-                    "source_id": _slugify(source_name),
+                    "source_id": slugify(source_name),
                     "source_name": source_name,
                     "source_type": self.source_type_name,
                     "region": "global",
@@ -172,7 +180,7 @@ class WebzClient(NewsAPIClient):
     env_key_name = "WEBZ_API"
     source_type_name = "news_api_webz"
 
-    def fetch(self, fetched_at: str) -> List[Dict[str, object]]:
+    def fetch(self, fetched_at: str) -> List[Dict]:
         query = urllib.parse.urlencode(
             {
                 "token": self.api_key,
@@ -187,7 +195,7 @@ class WebzClient(NewsAPIClient):
         if not isinstance(records, list):
             return []
 
-        items: List[Dict[str, object]] = []
+        items: List[Dict] = []
         for article in records:
             if not isinstance(article, dict):
                 continue
@@ -195,7 +203,7 @@ class WebzClient(NewsAPIClient):
             source_name = str(thread.get("site") or "Webz")
             items.append(
                 {
-                    "source_id": _slugify(source_name),
+                    "source_id": slugify(source_name),
                     "source_name": source_name,
                     "source_type": self.source_type_name,
                     "region": "global",
@@ -222,9 +230,9 @@ class NewsAPIAdapter:
             WebzClient(request_timeout_seconds, max_items_per_source),
         )
 
-    def fetch(self) -> tuple[List[Dict[str, object]], List[str]]:
+    def fetch(self) -> Tuple[List[Dict], List[str]]:
         fetched_at = datetime.now(UTC).isoformat()
-        items: List[Dict[str, object]] = []
+        items: List[Dict] = []
         errors: List[str] = []
 
         for client in self.clients:
@@ -232,7 +240,8 @@ class NewsAPIAdapter:
                 continue
             try:
                 items.extend(client.fetch(fetched_at))
-            except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError) as error:
+            except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError,
+                    RemoteDisconnected, IncompleteRead) as error:
                 errors.append(f"{client.__class__.__name__} failed: {error}")
-                continue
+
         return items, errors
