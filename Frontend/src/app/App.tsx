@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { CheckCircle, Globe, Zap, Shield, FileText, Radio, ChevronRight, ArrowUpRight, Search, Bookmark, Share2, ArrowLeft, Check } from "lucide-react";
 import { HashRouter, Routes, Route, useNavigate, useParams } from "react-router";
 import { ImageWithFallback } from "./components/figma/ImageWithFallback";
+import LoginPage from "./components/LoginPage";
+
 
 type Phase = "intro" | "reveal" | "home";
 
@@ -56,7 +58,7 @@ const FRAMES = [
 ];
 
 // ─── News data ────────────────────────────────────────────────────────────────
-const NAV_CATS = ["World", "Politics", "Technology", "Business", "Science", "Health", "Culture"];
+const NAV_CATS = ["World", "Politics", "Technology", "Business", "Science", "Health", "Climate", "Analysis"];
 
 const PIPELINE = [
   { Icon: Globe,    label: "Data Gathering" },
@@ -127,7 +129,21 @@ const slugify = (text: string) =>
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)+/g, '');
 
-const ALL_ARTICLES = [
+export interface Article {
+  category: string;
+  headline: string;
+  excerpt?: string;
+  image?: string;
+  author: string;
+  date: string;
+  readTime?: string;
+  sources: number;
+  neutrality: number;
+  type: string;
+  role?: string;
+}
+
+const ALL_ARTICLES: Article[] = [
   { ...FEATURED, type: "featured" },
   ...SECONDARY.map(s => ({ ...s, type: "secondary" })),
   ...BRIEFS.map(b => ({
@@ -331,12 +347,51 @@ function RevealScreen({ onEnter }: { onEnter: () => void }) {
 // ─── Home Page ────────────────────────────────────────────────────────────────
 function HomePage() {
   const [activeNav, setActiveNav] = useState("World");
+  const [userSession, setUserSession] = useState("");
+  const [userRole, setUserRole] = useState("");
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setUserSession(sessionStorage.getItem("weaware_user") || "");
+    setUserRole(sessionStorage.getItem("weaware_role") || "");
+  }, []);
+
+  const handleSignOut = () => {
+    sessionStorage.removeItem("weaware_auth");
+    sessionStorage.removeItem("weaware_user");
+    sessionStorage.removeItem("weaware_role");
+    navigate("/");
+  };
 
   const handleSelect = (story: any) => {
     const title = story.headline || story.text;
     navigate("/article/" + slugify(title));
   };
+
+  // Filter all articles matching the active navigation tab
+  const categoryArticles = ALL_ARTICLES.filter(
+    (art) => art.category.toLowerCase() === activeNav.toLowerCase()
+  );
+
+  // Dynamically configure featured story for selected category (fallback to global FEATURED if empty)
+  const featuredStory = categoryArticles[0] || { ...FEATURED, type: "featured" };
+
+  // Select secondary stories excluding the currently featured story
+  const remainingCategoryArticles = categoryArticles.filter(a => a.headline !== featuredStory.headline);
+  const secondaryStories = remainingCategoryArticles.length > 0
+    ? remainingCategoryArticles.slice(0, 3)
+    : SECONDARY.filter(a => a.headline !== featuredStory.headline).slice(0, 3);
+
+  // Select brief stories excluding stories already shown in featured or secondary
+  const shownHeadlines = new Set([featuredStory.headline, ...secondaryStories.map(s => s.headline)]);
+  const remainingBriefs = ALL_ARTICLES.filter(a => !shownHeadlines.has(a.headline) && a.category.toLowerCase() === activeNav.toLowerCase());
+  const briefStories = remainingBriefs.length > 0
+    ? remainingBriefs.slice(0, 5)
+    : ALL_ARTICLES.filter(a => !shownHeadlines.has(a.headline) && a.type === "brief").slice(0, 5);
+
+  // Select opinion/analysis stories excluding stories already shown
+  const remainingOpinions = ALL_ARTICLES.filter(a => !shownHeadlines.has(a.headline) && a.type === "opinion");
+  const opinionStories = remainingOpinions.slice(0, 3);
 
   return (
     <motion.div
@@ -363,14 +418,28 @@ function HomePage() {
           </div>
           <div className="flex items-center gap-4 text-xs text-muted-foreground" style={{ fontFamily: MONO }}>
             <span>214 sources verified</span>
-            <span>Subscribe</span>
+            {userSession ? (
+              <div className="flex items-center gap-2">
+                <span className="text-foreground border border-foreground/20 px-1.5 py-0.5 text-[10px] bg-secondary font-semibold">
+                  {userSession.includes("@") ? userSession.split("@")[0] : userSession}: {userRole}
+                </span>
+                <button 
+                  onClick={handleSignOut}
+                  className="hover:text-foreground hover:underline cursor-pointer bg-transparent border-none p-0 text-[10px] font-mono tracking-widest font-semibold uppercase text-muted-foreground"
+                >
+                  [ Sign Out ]
+                </button>
+              </div>
+            ) : (
+              <span>Subscribe</span>
+            )}
           </div>
         </div>
       </div>
 
       {/* ── Masthead ── */}
       <header className="border-b-2 border-foreground">
-        <div className="max-w-7xl mx-auto px-5 md:px-8 py-7 text-center">
+        <div className="max-w-7xl mx-auto px-5 md:px-8 py-4 text-center">
           <h1 className="font-bold tracking-tight leading-none"
             style={{ fontFamily: SERIF, fontSize: "clamp(2.8rem, 7vw, 5.5rem)", letterSpacing: "-0.02em" }}>
             WeAware
@@ -413,11 +482,14 @@ function HomePage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 border border-border">
 
           {/* Feature */}
-          <article onClick={() => handleSelect(FEATURED)} className="lg:col-span-7 border-b lg:border-b-0 lg:border-r border-border cursor-pointer group">
-            <div className="h-72 md:h-96 bg-muted overflow-hidden">
+          <article onClick={() => handleSelect(featuredStory)} className="lg:col-span-7 border-b lg:border-b-0 lg:border-r border-border cursor-pointer group">
+            <div 
+              className="aspect-[16/10] md:aspect-[16/9] w-full bg-muted overflow-hidden"
+              style={{ maxHeight: "280px" }}
+            >
               <ImageWithFallback
-                src={FEATURED.image}
-                alt={FEATURED.headline}
+                src={featuredStory.image}
+                alt={featuredStory.headline}
                 className="w-full h-full object-cover grayscale opacity-90 group-hover:opacity-100 transition-opacity duration-500"
               />
             </div>
@@ -425,7 +497,7 @@ function HomePage() {
               <div className="flex items-center gap-3 mb-4">
                 <span className="text-xs tracking-widest uppercase text-foreground font-semibold border-b border-foreground pb-0.5"
                   style={{ fontFamily: MONO }}>
-                  {FEATURED.category}
+                  {featuredStory.category}
                 </span>
                 <span className="text-xs text-muted-foreground" style={{ fontFamily: MONO }}>
                   Featured Report
@@ -433,21 +505,21 @@ function HomePage() {
               </div>
               <h2 className="font-bold leading-tight mb-4"
                 style={{ fontFamily: SERIF, fontSize: "clamp(1.5rem, 2.5vw, 2.1rem)" }}>
-                {FEATURED.headline}
+                {featuredStory.headline}
               </h2>
               <p className="text-sm leading-relaxed text-muted-foreground mb-6">
-                {FEATURED.excerpt}
+                {featuredStory.excerpt}
               </p>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 text-xs text-muted-foreground" style={{ fontFamily: MONO }}>
-                  <span>{FEATURED.author}</span>
+                  <span>{featuredStory.author}</span>
                   <span>·</span>
-                  <span>{FEATURED.date}</span>
+                  <span>{featuredStory.date}</span>
                   <span>·</span>
-                  <span>{FEATURED.readTime}</span>
+                  <span>{featuredStory.readTime || "5 min read"}</span>
                   <span>·</span>
                   <span className="flex items-center gap-1">
-                    <CheckCircle size={10} />{FEATURED.sources} sources
+                    <CheckCircle size={10} />{featuredStory.sources} sources
                   </span>
                 </div>
               </div>
@@ -456,7 +528,7 @@ function HomePage() {
 
           {/* Secondary */}
           <div className="lg:col-span-5 flex flex-col divide-y divide-border">
-            {SECONDARY.map(story => (
+            {secondaryStories.map(story => (
               <article key={story.headline} onClick={() => handleSelect(story)} className="flex gap-0 group cursor-pointer hover:bg-secondary transition-colors">
                 <div className="flex-1 p-5">
                   <span className="text-xs tracking-widest uppercase font-semibold text-foreground border-b border-foreground pb-0.5 inline-block mb-2"
@@ -473,13 +545,15 @@ function HomePage() {
                     <span className="flex items-center gap-1"><CheckCircle size={9} />{story.sources} sources</span>
                   </div>
                 </div>
-                <div className="w-24 md:w-28 flex-shrink-0 overflow-hidden bg-muted">
-                  <ImageWithFallback
-                    src={story.image}
-                    alt={story.headline}
-                    className="w-full h-full object-cover grayscale opacity-80 group-hover:opacity-100 transition-opacity duration-300"
-                  />
-                </div>
+                {story.image && (
+                  <div className="w-24 md:w-28 flex-shrink-0 overflow-hidden bg-muted border-l border-border">
+                    <ImageWithFallback
+                      src={story.image}
+                      alt={story.headline}
+                      className="w-full h-full object-cover grayscale opacity-80 group-hover:opacity-100 transition-opacity duration-300"
+                    />
+                  </div>
+                )}
               </article>
             ))}
           </div>
@@ -498,15 +572,15 @@ function HomePage() {
               In Brief
             </h2>
             <div className="flex flex-col divide-y divide-border">
-              {BRIEFS.map(brief => (
-                <div key={brief.text} onClick={() => handleSelect(brief)} className="py-4 cursor-pointer group flex items-start gap-4 justify-between">
+              {briefStories.map(brief => (
+                <div key={brief.headline} onClick={() => handleSelect(brief)} className="py-4 cursor-pointer group flex items-start gap-4 justify-between">
                   <div className="flex-1">
                     <span className="text-xs tracking-widest uppercase font-semibold text-foreground border-b border-foreground pb-0.5 inline-block mb-2"
                       style={{ fontFamily: MONO }}>
                       {brief.category}
                     </span>
                     <p className="text-sm leading-relaxed text-muted-foreground group-hover:text-foreground transition-colors">
-                      {brief.text}
+                      {brief.headline}
                     </p>
                   </div>
                   {brief.image && (
@@ -530,7 +604,7 @@ function HomePage() {
               Analysis
             </h2>
             <div className="flex flex-col divide-y divide-border">
-              {OPINIONS.map((piece, i) => (
+              {opinionStories.map((piece, i) => (
                 <article key={piece.headline} onClick={() => handleSelect(piece)} className="py-5 group cursor-pointer">
                   <div className="flex items-start gap-4 justify-between">
                     <div className="flex items-start gap-4 flex-1">
@@ -544,7 +618,7 @@ function HomePage() {
                           {piece.headline}
                         </h3>
                         <div className="mt-2 text-xs text-muted-foreground" style={{ fontFamily: MONO }}>
-                          {piece.author} — {piece.role} · {piece.date}
+                          {piece.author} {piece.role ? `— ${piece.role}` : ""} · {piece.date}
                         </div>
                       </div>
                     </div>
@@ -910,23 +984,40 @@ function ArticlePage() {
 }
 
 function HomeRouteWrapper() {
-  const [phase, setPhase] = useState<Phase>(() => {
-    const entered = sessionStorage.getItem("weaware_entered");
-    return entered === "true" ? "home" : "reveal";
-  });
+  const navigate = useNavigate();
+  const isAuth = sessionStorage.getItem("weaware_auth") === "true";
 
   const handleEnter = () => {
-    sessionStorage.setItem("weaware_entered", "true");
-    setPhase("home");
+    navigate("/login");
   };
 
   return (
     <AnimatePresence mode="wait">
-      {phase === "intro"  && <IntroVideo   key="intro"  onComplete={() => setPhase("reveal")} />}
-      {phase === "reveal" && <RevealScreen key="reveal" onEnter={handleEnter} />}
-      {phase === "home"   && <HomePage     key="home" />}
+      {isAuth ? (
+        <HomePage key="home" />
+      ) : (
+        <RevealScreen key="reveal" onEnter={handleEnter} />
+      )}
     </AnimatePresence>
   );
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    const auth = sessionStorage.getItem("weaware_auth");
+    if (auth !== "true") {
+      navigate("/login", { replace: true });
+    } else {
+      setAuthorized(true);
+    }
+  }, [navigate]);
+
+  if (!authorized) return null;
+  return <>{children}</>;
 }
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -934,8 +1025,9 @@ export default function App() {
   return (
     <HashRouter>
       <Routes>
+        <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<HomeRouteWrapper />} />
-        <Route path="/article/:slug" element={<ArticlePage />} />
+        <Route path="/article/:slug" element={<AuthGuard><ArticlePage /></AuthGuard>} />
       </Routes>
     </HashRouter>
   );
