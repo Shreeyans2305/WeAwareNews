@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS stories (
     story_id     TEXT PRIMARY KEY,
     source_count INTEGER NOT NULL,
     recency      TEXT NOT NULL,
-    created_at   TEXT NOT NULL
+    created_at   TEXT NOT NULL,
+    centroid     TEXT             -- JSON-serialised float array (nullable; NULL for jaccard-mode rows)
 );
 
 CREATE TABLE IF NOT EXISTS items (
@@ -98,6 +99,30 @@ class SQLiteIngestionStore:
         with self._connect() as connection:
             connection.executescript(_SCHEMA)
             connection.commit()
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """
+        Non-destructive schema migrations for existing databases.
+
+        Each migration is guarded by a column-existence check so it is safe
+        to call on every startup — it is a no-op when the schema is current.
+
+        Migration history:
+          v1 → v2: ADD COLUMN centroid TEXT to stories
+                   (existing rows keep NULL; backfill centroids separately
+                   by re-running clustering with CLUSTERING_MODE=hybrid)
+        """
+        with self._connect() as connection:
+            cols = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(stories)").fetchall()
+            }
+            if "centroid" not in cols:
+                connection.execute(
+                    "ALTER TABLE stories ADD COLUMN centroid TEXT"
+                )
+                connection.commit()
 
     # ------------------------------------------------------------------
     # Poll state
@@ -132,22 +157,33 @@ class SQLiteIngestionStore:
         """
         Persist story-cluster metadata rows.
         Called after clustering, before items are persisted.
+
+        The `centroid` field (JSON-serialised float array or None) is written
+        when present in the story dict. Rows from jaccard-mode clustering
+        will have centroid=None and the column will be left as NULL.
         """
         if not stories:
             return
         now_iso = datetime.now(UTC).isoformat()
         rows = [
-            (story["story_id"], story["source_count"], story["recency"], now_iso)
+            (
+                story["story_id"],
+                story["source_count"],
+                story["recency"],
+                now_iso,
+                story.get("centroid"),   # None → NULL for jaccard-mode rows
+            )
             for story in stories
         ]
         with self._connect() as connection:
             connection.executemany(
                 """
-                INSERT INTO stories(story_id, source_count, recency, created_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO stories(story_id, source_count, recency, created_at, centroid)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(story_id) DO UPDATE SET
                     source_count = excluded.source_count,
-                    recency      = excluded.recency
+                    recency      = excluded.recency,
+                    centroid     = COALESCE(excluded.centroid, stories.centroid)
                 """,
                 rows,
             )
@@ -255,3 +291,61 @@ class SQLiteIngestionStore:
                 rows,
             )
             connection.commit()
+
+    # ------------------------------------------------------------------
+    # Extraction stage helpers (Stage 1.5)
+    # ------------------------------------------------------------------
+
+    def get_pending_extraction_items(self, limit: int = 50) -> List[Dict]:
+        """
+        Return up to `limit` items from the review_queue that are still
+        pending extraction. Excludes paywalled items (Jina can't bypass them)
+        and items without a URL.
+        """
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT i.item_hash, i.url, i.source_name, i.extraction_status
+                FROM review_queue rq
+                JOIN items i ON i.item_hash = rq.item_hash
+                WHERE rq.status = 'pending'
+                  AND i.paywall = 0
+                  AND i.url IS NOT NULL
+                  AND i.url != ''
+                ORDER BY i.published_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def update_item_extraction(
+        self, item_hash: str, raw_text: str, extraction_status: str
+    ) -> None:
+        """
+        Overwrite raw_text and extraction_status for a single item after
+        successful Jina extraction.
+        """
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE items
+                SET raw_text = ?, extraction_status = ?
+                WHERE item_hash = ?
+                """,
+                (raw_text, extraction_status, item_hash),
+            )
+            connection.commit()
+
+    def resolve_review_item(self, item_hash: str, status: str) -> None:
+        """
+        Set the review_queue status for one item.
+        Expected values: 'resolved' (text now ok) | 'failed' (Jina couldn't help).
+        """
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE review_queue SET status = ? WHERE item_hash = ?",
+                (status, item_hash),
+            )
+            connection.commit()
+
