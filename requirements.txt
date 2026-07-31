@@ -1,0 +1,19 @@
+# WeAware ingestion pipeline dependencies
+
+# RSS parsing (Stage 1 RSS adapter)
+feedparser==6.0.12
+
+# ---- Hybrid clustering dependencies (CLUSTERING_MODE=hybrid only) --------
+# These are only loaded at runtime when the hybrid path is active.
+# They are NOT imported at module level, so the jaccard path has zero cost.
+
+# Multilingual sentence embeddings — intfloat/multilingual-e5-base model
+# (~560 MB download on first use; model cached in ~/.cache/huggingface/)
+sentence-transformers>=2.7.0
+
+# Multilingual NER — spaCy + xx_ent_wiki_sm model
+# Model is NOT installed by pip; run after: python -m spacy download xx_ent_wiki_sm
+spacy>=3.7.0,<3.8.0
+
+# Numerical operations (centroid arithmetic)
+numpy>=1.26.0

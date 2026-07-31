@@ -5,7 +5,8 @@ Execution order:
   1. Fetch   — pull raw items from RSS feeds, commercial news APIs, and Bluesky
   2. Normalise — coerce all items to the unified schema; compute item_hash
   3. Dedup   — drop URL-level duplicates within the same source
-  4. Cluster  — group items that likely cover the same story (title word-overlap)
+  4. Cluster  — group items that likely cover the same story
+              (mode controlled by CLUSTERING_MODE env var: "jaccard" | "hybrid")
   5. Persist  — upsert stories, items, and poll state into items.db
   6. Flag     — insert items with short/failed extraction into the review queue
 
@@ -16,8 +17,9 @@ Run:
 from ingestion.adapters.bluesky_adapter import BlueskyAdapter
 from ingestion.adapters.newsapi_adapter import NewsAPIAdapter
 from ingestion.adapters.rss_adapter import RSSAdapter
-from ingestion.cluster import cluster_items
+from ingestion.cluster import CLUSTERING_MODE, cluster_items
 from ingestion.config import load_settings
+from ingestion.extract import run_extraction
 from ingestion.normalize import dedup_intra_source, normalize_items
 from ingestion.store.sqlite_store import SQLiteIngestionStore
 
@@ -66,7 +68,7 @@ def run() -> None:
     # ------------------------------------------------------------------ #
     # 4. Cluster (cross-source story grouping)
     # ------------------------------------------------------------------ #
-    stories, item_to_story = cluster_items(deduped)
+    stories, item_to_story = cluster_items(deduped, mode=CLUSTERING_MODE)
 
     # Stamp story_id and corroboration flag onto each item
     for item in deduped:
@@ -92,6 +94,11 @@ def run() -> None:
     store.flag_for_review(deduped)
 
     # ------------------------------------------------------------------ #
+    # 7. Extract full text via Jina AI (for short/failed items)
+    # ------------------------------------------------------------------ #
+    extract_summary = run_extraction(store, request_timeout=settings.request_timeout_seconds)
+
+    # ------------------------------------------------------------------ #
     # Summary
     # ------------------------------------------------------------------ #
     multi_source_stories = sum(1 for s in stories if s["source_count"] > 1)
@@ -102,6 +109,10 @@ def run() -> None:
         f"  fetched  : rss={len(rss_raw)}  api={len(api_raw)}  bluesky={len(bluesky_raw)}\n"
         f"  pipeline : normalized={len(normalized)}  deduped={len(deduped)}  persisted={inserted_or_updated}\n"
         f"  clusters : stories={len(stories)}  multi-source={multi_source_stories}  corroborated_items={corroborated}\n"
+        f"  extract  : attempted={extract_summary.get('attempted', 0)}  "
+        f"ok={extract_summary.get('ok', 0)}  "
+        f"still_short={extract_summary.get('still_short', 0)}  "
+        f"failed={extract_summary.get('failed', 0)}\n"
         f"  db       : {settings.sqlite_path}"
     )
 

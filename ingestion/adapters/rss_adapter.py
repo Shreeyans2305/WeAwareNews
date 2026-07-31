@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import feedparser  # type: ignore[import]
+import feedparser
 
 from ingestion.utils import UTC, normalize_text, strip_html
 
@@ -73,12 +73,20 @@ class RSSAdapter:
 
         Returns (entries, error_message_or_None).
         feedparser handles both RSS 2.0 and Atom transparently.
+
+        feedparser.parse() is documented as "never raises", but in practice
+        some redirect chains (HTTP → HTTPS) cause RemoteDisconnected or other
+        socket-level errors to escape. We catch them here so one bad feed
+        cannot abort the entire run.
         """
-        parsed = feedparser.parse(
-            url,
-            request_headers={"User-Agent": "WeAwareIngestion/1.0 (+RSS Poller)"},
-            agent="WeAwareIngestion/1.0 (+RSS Poller)",
-        )
+        try:
+            parsed = feedparser.parse(
+                url,
+                request_headers={"User-Agent": "WeAwareIngestion/1.0 (+RSS Poller)"},
+                agent="WeAwareIngestion/1.0 (+RSS Poller)",
+            )
+        except Exception as exc:
+            return [], str(exc)
 
         http_status = parsed.get("status", 200)
         if http_status and http_status >= 400:
