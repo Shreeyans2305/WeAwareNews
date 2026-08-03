@@ -53,11 +53,11 @@ NER model: spaCy xx_ent_wiki_sm
 
 === Configuration ===
 
-  CLUSTERING_MODE              str   "jaccard" | "hybrid"   (env: WEAWARE_CLUSTERING_MODE)
+  CLUSTERING_MODE              str   "hybrid" | "jaccard"   default: "hybrid"  (env: WEAWARE_CLUSTERING_MODE)
   TITLE_WINDOW_HOURS           int    6                      (env: WEAWARE_CLUSTER_WINDOW_HOURS)
   JACCARD_THRESHOLD            float  0.5   legacy threshold & hybrid short-circuit
   JACCARD_SHORT_CIRCUIT        float  0.5   items above this skip Stage A/B
-  EMBEDDING_COSINE_THRESHOLD   float  0.78  Stage B assignment threshold
+  EMBEDDING_COSINE_THRESHOLD   float  0.85  Stage B assignment threshold
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ from ingestion.utils import UTC, normalize_text
 # Module-level configuration constants (overridable via env vars)
 # ---------------------------------------------------------------------------
 
-CLUSTERING_MODE: str = os.getenv("WEAWARE_CLUSTERING_MODE", "jaccard").lower()
+CLUSTERING_MODE: str = os.getenv("WEAWARE_CLUSTERING_MODE", "hybrid").lower()
 """
 "jaccard"  — pure title word-overlap (original behavior, no NLP models loaded)
 "hybrid"   — Jaccard fast-path → Stage A entity blocking → Stage B embeddings

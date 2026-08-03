@@ -12,6 +12,9 @@ __pycache__/
 *.db-wal
 *.db-shm
 
+# Local tools / binaries (not part of the source)
+cloud-sql-proxy
+
 # Legacy pipeline output (no longer generated)
 weaware_items.json
-.pytest_cache
+.pytest_cache/
