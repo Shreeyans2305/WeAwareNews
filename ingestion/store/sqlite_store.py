@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS stories (
     source_count INTEGER NOT NULL,
     recency      TEXT NOT NULL,
     created_at   TEXT NOT NULL,
-    centroid     TEXT             -- JSON-serialised float array (nullable; NULL for jaccard-mode rows)
+    centroid     TEXT,             -- JSON-serialised float array (nullable; NULL for jaccard-mode rows)
+    posted       INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS items (
@@ -54,7 +55,8 @@ CREATE TABLE IF NOT EXISTS items (
     is_social                   INTEGER NOT NULL DEFAULT 0,
     extraction_status           TEXT NOT NULL DEFAULT 'ok',
     story_id                    TEXT REFERENCES stories(story_id),
-    has_cross_source_corroboration INTEGER NOT NULL DEFAULT 0
+    has_cross_source_corroboration INTEGER NOT NULL DEFAULT 0,
+    image_url                   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS review_queue (
@@ -122,7 +124,20 @@ class SQLiteIngestionStore:
                 connection.execute(
                     "ALTER TABLE stories ADD COLUMN centroid TEXT"
                 )
-                connection.commit()
+            if "posted" not in cols:
+                connection.execute(
+                    "ALTER TABLE stories ADD COLUMN posted INTEGER NOT NULL DEFAULT 0"
+                )
+            
+            item_cols = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(items)").fetchall()
+            }
+            if "image_url" not in item_cols:
+                connection.execute(
+                    "ALTER TABLE items ADD COLUMN image_url TEXT"
+                )
+            connection.commit()
 
     # ------------------------------------------------------------------
     # Poll state
@@ -221,6 +236,7 @@ class SQLiteIngestionStore:
                     item.get("extraction_status", "ok"),
                     item.get("story_id"),
                     int(bool(item.get("has_cross_source_corroboration", False))),
+                    item.get("image_url"),
                 )
             )
 
@@ -234,9 +250,9 @@ class SQLiteIngestionStore:
                     item_hash, source_id, source_name, source_type, region, url,
                     title, raw_text, published_at, fetched_at, author, lang,
                     paywall, is_social, extraction_status, story_id,
-                    has_cross_source_corroboration
+                    has_cross_source_corroboration, image_url
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(item_hash) DO UPDATE SET
                     source_name                    = excluded.source_name,
                     source_type                    = excluded.source_type,
@@ -251,7 +267,8 @@ class SQLiteIngestionStore:
                     is_social                      = excluded.is_social,
                     extraction_status              = excluded.extraction_status,
                     story_id                       = excluded.story_id,
-                    has_cross_source_corroboration = excluded.has_cross_source_corroboration
+                    has_cross_source_corroboration = excluded.has_cross_source_corroboration,
+                    image_url                      = excluded.image_url
                 """,
                 rows,
             )
@@ -320,7 +337,7 @@ class SQLiteIngestionStore:
             return [dict(row) for row in rows]
 
     def update_item_extraction(
-        self, item_hash: str, raw_text: str, extraction_status: str
+        self, item_hash: str, raw_text: str, extraction_status: str, image_url: Optional[str] = None
     ) -> None:
         """
         Overwrite raw_text and extraction_status for a single item after
@@ -330,10 +347,10 @@ class SQLiteIngestionStore:
             connection.execute(
                 """
                 UPDATE items
-                SET raw_text = ?, extraction_status = ?
+                SET raw_text = ?, extraction_status = ?, image_url = COALESCE(?, image_url)
                 WHERE item_hash = ?
                 """,
-                (raw_text, extraction_status, item_hash),
+                (raw_text, extraction_status, image_url, item_hash),
             )
             connection.commit()
 

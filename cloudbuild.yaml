@@ -1,0 +1,12 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['pull', 'us-central1-docker.pkg.dev/$PROJECT_ID/weaware-repo/migrator:latest']
+- name: 'gcr.io/cloud-builders/docker'
+  args: [
+            'build',
+            '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/weaware-repo/migrator:latest',
+            '--cache-from', 'us-central1-docker.pkg.dev/$PROJECT_ID/weaware-repo/migrator:latest',
+            '.'
+        ]
+images:
+- 'us-central1-docker.pkg.dev/$PROJECT_ID/weaware-repo/migrator:latest'

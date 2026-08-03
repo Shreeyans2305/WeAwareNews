@@ -28,6 +28,8 @@ from http.client import IncompleteRead, RemoteDisconnected
 from typing import Dict, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
 
+from bs4 import BeautifulSoup
+
 # ── Configuration constants ───────────────────────────────────────────────────
 
 JINA_READER_BASE = "https://r.jina.ai"
@@ -170,11 +172,29 @@ def _fetch_jina(
         with urllib.request.urlopen(request, timeout=timeout) as response:
             raw = response.read().decode("utf-8", errors="replace")
         text = _parse_jina_response(raw)
-        return (text or None), None
+        
+        # Additionally fetch the direct URL to scrape the image tag
+        image_url = None
+        try:
+            req_img = urllib.request.Request(url, headers={"User-Agent": "WeAwareIngestion/1.0"})
+            with urllib.request.urlopen(req_img, timeout=timeout) as res_img:
+                html = res_img.read().decode("utf-8", errors="ignore")
+                soup = BeautifulSoup(html, "html.parser")
+                meta_og = soup.find("meta", property="og:image")
+                if meta_og and meta_og.get("content"):
+                    image_url = meta_og["content"]
+                else:
+                    meta_tw = soup.find("meta", attrs={"name": "twitter:image"})
+                    if meta_tw and meta_tw.get("content"):
+                        image_url = meta_tw["content"]
+        except Exception:
+            pass
+            
+        return (text or None), None, image_url
     except _NETWORK_ERRORS as exc:
-        return None, str(exc)
+        return None, str(exc), None
     except Exception as exc:
-        return None, f"unexpected: {exc}"
+        return None, f"unexpected: {exc}", None
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
@@ -210,14 +230,14 @@ def run_extraction(store, request_timeout: int = 15) -> Dict[str, int]:
             summary["failed"] += 1
             continue
 
-        text, error = _fetch_jina(url, api_key, request_timeout)
+        text, error, image_url = _fetch_jina(url, api_key, request_timeout)
 
         if error or not text:
             store.resolve_review_item(item["item_hash"], "failed")
             summary["failed"] += 1
         else:
             new_status = _extraction_status(text)
-            store.update_item_extraction(item["item_hash"], text, new_status)
+            store.update_item_extraction(item["item_hash"], text, new_status, image_url=image_url)
             queue_resolution = "resolved" if new_status == "ok" else "failed"
             store.resolve_review_item(item["item_hash"], queue_resolution)
 

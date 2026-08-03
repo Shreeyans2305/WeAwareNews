@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+
+# Databases (generated artifacts — not source)
+
+# Legacy pipeline output (no longer generated)
+weaware_items.json
+.pytest_cache
+.git/
