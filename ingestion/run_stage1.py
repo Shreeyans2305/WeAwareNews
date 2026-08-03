@@ -22,11 +22,18 @@ from ingestion.config import load_settings
 from ingestion.extract import run_extraction
 from ingestion.normalize import dedup_intra_source, normalize_items
 from ingestion.store.sqlite_store import SQLiteIngestionStore
+from ingestion.store.postgres_store import PostgresIngestionStore
 
 
 def run() -> None:
     settings = load_settings()
-    store = SQLiteIngestionStore(settings.sqlite_path)
+    import os
+    db_backend = os.getenv("WEAWARE_DB_BACKEND", "sqlite").lower()
+    if db_backend == "postgres":
+        connection_string = os.getenv("WEAWARE_POSTGRES_URL")
+        store = PostgresIngestionStore(connection_string)
+    else:
+        store = SQLiteIngestionStore(settings.sqlite_path)
     store.initialize()
 
     # ------------------------------------------------------------------ #
