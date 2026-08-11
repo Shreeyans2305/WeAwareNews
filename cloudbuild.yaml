@@ -12,27 +12,46 @@ steps:
     args:
       - '-c'
       - |
+        echo "[$(date -u)] Downloading cloud-sql-proxy..."
         wget https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.11.0/cloud-sql-proxy.linux.amd64 -O cloud-sql-proxy
         chmod +x cloud-sql-proxy
+        
+        echo "[$(date -u)] Starting cloud-sql-proxy in background..."
         ./cloud-sql-proxy project-9ba21d45-1dfd-4108-b69:us-central1:weaware-pg --port=5433 &
         sleep 5
+        
+        echo "[$(date -u)] Installing Python dependencies..."
         pip install -r requirements.txt
+        
+        echo "[$(date -u)] Downloading spaCy model..."
         python -m spacy download xx_ent_wiki_sm
-        
-        # 1. Collect
+
+        echo "[$(date -u)] ======================================"
+        echo "[$(date -u)] STEP 1: Collecting News (run_stage1)..."
+        echo "[$(date -u)] ======================================"
         python -m ingestion.run_stage1
-        
-        # 2. Cluster
+
+        echo "[$(date -u)] ======================================"
+        echo "[$(date -u)] STEP 2: Clustering (recluster.py)..."
+        echo "[$(date -u)] ======================================"
         python recluster.py
-        
-        # 3. Check for false merges
+
+        echo "[$(date -u)] ======================================"
+        echo "[$(date -u)] STEP 3: Checking False Merges (fix_clusters.py)..."
+        echo "[$(date -u)] ======================================"
         python fix_clusters.py
-        
-        # 4. Update DB
+
+        echo "[$(date -u)] ======================================"
+        echo "[$(date -u)] STEP 4: Updating DB (sync_to_postgres.py)..."
+        echo "[$(date -u)] ======================================"
         python sync_to_postgres.py --full
         
-        # 5. Cleanup: Kill proxy so Cloud Build doesn't hang waiting for it
+        echo "[$(date -u)] ======================================"
+        echo "[$(date -u)] STEP 5: Cleaning up proxy..."
+        echo "[$(date -u)] ======================================"
         pkill cloud-sql-proxy || true
+        
+        echo "[$(date -u)] Pipeline completed successfully!"
     env:
       - 'GOOGLE_CLOUD_PROJECT=project-9ba21d45-1dfd-4108-b69'
       - 'PYTHONUNBUFFERED=1'
