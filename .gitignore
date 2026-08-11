@@ -18,3 +18,4 @@ cloud-sql-proxy
 # Legacy pipeline output (no longer generated)
 weaware_items.json
 .pytest_cache/
+make-workflow.txt
