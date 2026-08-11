@@ -34,7 +34,7 @@ class BlueskyAdapter:
         self.curated_accounts = curated_accounts
         self.keywords = keywords
         self.authenticated_base_url = "https://bsky.social/xrpc"
-        self.public_base_url = "https://api.bsky.app/xrpc"
+        self.public_base_url = "https://public.api.bsky.app/xrpc"
 
     # ------------------------------------------------------------------
     # HTTP helpers

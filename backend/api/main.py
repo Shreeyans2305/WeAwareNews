@@ -125,10 +125,11 @@ def get_next_story(db=Depends(get_db), auth=Depends(verify_api_key)):
     cursor = db.cursor()
     cursor.execute(
         """
-        SELECT story_id, source_count
-        FROM stories
-        WHERE source_count >= %s AND posted = false
-        ORDER BY recency DESC
+        SELECT s.story_id, s.source_count
+        FROM stories s
+        WHERE s.source_count >= %s AND s.posted = false
+          AND EXISTS (SELECT 1 FROM items i WHERE i.story_id = s.story_id AND i.image_url IS NOT NULL)
+        ORDER BY s.recency DESC
         LIMIT 1
         """,
         (min_sources,),
@@ -158,12 +159,11 @@ def get_next_story(db=Depends(get_db), auth=Depends(verify_api_key)):
         # columns: source_name, title, url, raw_text, region, image_url
         if not image_url and r[5]:
             image_url = r[5]
-        snippet = r[3][:200] if r[3] else None
         articles.append(Article(
             source_name=r[0],
             title=r[1],
             url=r[2],
-            snippet=snippet,
+            snippet=r[3],  # Return the full text instead of just 200 chars
             region=r[4],
         ))
 

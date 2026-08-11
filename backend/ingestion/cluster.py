@@ -99,7 +99,7 @@ without running Stage A or B. Identical to the legacy threshold so
 same-language near-identical headlines cluster with zero model cost.
 """
 
-EMBEDDING_COSINE_THRESHOLD: float = 0.85
+EMBEDDING_COSINE_THRESHOLD: float = 0.90
 """Stage B cosine similarity threshold for centroid-nearest assignment."""
 
 _NER_MODEL_NAME: str = "xx_ent_wiki_sm"
@@ -328,7 +328,7 @@ def _assign_hybrid(
         if _word_overlap_ratio(norm_title, head["norm_title"]) >= JACCARD_SHORT_CIRCUIT:
             return idx
 
-    STRICT_EMBEDDING_THRESHOLD = 0.85
+    STRICT_EMBEDDING_THRESHOLD = 0.92
     MIN_ENTITY_MATCH_SCORE = 4.5
 
     # ---- Stage A — entity blocking ----------------------------------------
@@ -352,10 +352,9 @@ def _assign_hybrid(
             candidates.append((idx, STRICT_EMBEDDING_THRESHOLD))
         elif (not item_entities and head_entities) or (item_entities and not head_entities):
             # FIX A: Asymmetric case (only one has zero entities)
-            # Use the entities from whichever has them, and keep default threshold.
-            # (Since one is empty, we consider them a candidate but rely entirely on embeddings)
+            # Use the strict threshold because a mismatch in entities implies risk.
             asymmetric_zero_entity_count += 1
-            candidates.append((idx, EMBEDDING_COSINE_THRESHOLD))
+            candidates.append((idx, STRICT_EMBEDDING_THRESHOLD))
         else:
             shared = item_entities & head_entities
             if shared:

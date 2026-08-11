@@ -14,6 +14,7 @@ Run:
   python -m ingestion.run_stage1
 """
 
+import time
 from ingestion.adapters.bluesky_adapter import BlueskyAdapter
 from ingestion.adapters.newsapi_adapter import NewsAPIAdapter
 from ingestion.adapters.rss_adapter import RSSAdapter
@@ -35,10 +36,13 @@ def run() -> None:
     else:
         store = SQLiteIngestionStore(settings.sqlite_path)
     store.initialize()
+    
+    times = {}
 
     # ------------------------------------------------------------------ #
     # 1. Fetch
     # ------------------------------------------------------------------ #
+    t0 = time.perf_counter()
     last_poll_state = store.get_poll_state()
 
     rss_adapter = RSSAdapter(
@@ -61,20 +65,26 @@ def run() -> None:
     rss_raw, rss_poll_updates, rss_errors = rss_adapter.fetch(last_poll_state)
     api_raw, api_errors = news_api_adapter.fetch()
     bluesky_raw, bluesky_errors = bluesky_adapter.fetch()
+    times["fetch"] = time.perf_counter() - t0
 
     # ------------------------------------------------------------------ #
     # 2. Normalise
     # ------------------------------------------------------------------ #
+    t0 = time.perf_counter()
     normalized = normalize_items(rss_raw + api_raw + bluesky_raw)
+    times["normalize"] = time.perf_counter() - t0
 
     # ------------------------------------------------------------------ #
     # 3. Dedup (intra-source, same URL)
     # ------------------------------------------------------------------ #
+    t0 = time.perf_counter()
     deduped = dedup_intra_source(normalized)
+    times["dedup"] = time.perf_counter() - t0
 
     # ------------------------------------------------------------------ #
     # 4. Cluster (cross-source story grouping)
     # ------------------------------------------------------------------ #
+    t0 = time.perf_counter()
     stories, item_to_story = cluster_items(deduped, mode=CLUSTERING_MODE)
 
     # Stamp story_id and corroboration flag onto each item
@@ -87,23 +97,30 @@ def run() -> None:
         item["has_cross_source_corroboration"] = bool(
             story and story["source_count"] > 1
         )
+    times["cluster"] = time.perf_counter() - t0
 
     # ------------------------------------------------------------------ #
     # 5. Persist
     # ------------------------------------------------------------------ #
+    t0 = time.perf_counter()
     store.upsert_stories(stories)
     inserted_or_updated = store.upsert_items(deduped)
     store.upsert_poll_state(rss_poll_updates)
+    times["persist"] = time.perf_counter() - t0
 
     # ------------------------------------------------------------------ #
     # 6. Flag for review
     # ------------------------------------------------------------------ #
+    t0 = time.perf_counter()
     store.flag_for_review(deduped)
+    times["flag"] = time.perf_counter() - t0
 
     # ------------------------------------------------------------------ #
     # 7. Extract full text via Jina AI (for short/failed items)
     # ------------------------------------------------------------------ #
+    t0 = time.perf_counter()
     extract_summary = run_extraction(store, request_timeout=settings.request_timeout_seconds)
+    times["extract"] = time.perf_counter() - t0
 
     # ------------------------------------------------------------------ #
     # Summary
@@ -120,6 +137,11 @@ def run() -> None:
         f"ok={extract_summary.get('ok', 0)}  "
         f"still_short={extract_summary.get('still_short', 0)}  "
         f"failed={extract_summary.get('failed', 0)}\n"
+        f"  jina     : avg_fetch={extract_summary.get('avg_jina_time', 0):.2f}s  "
+        f"boilerplate_ratio={extract_summary.get('boilerplate_ratio', 0)*100:.1f}%\n"
+        f"  timings  : fetch={times['fetch']:.2f}s  norm={times['normalize']:.2f}s  "
+        f"dedup={times['dedup']:.2f}s  cluster={times['cluster']:.2f}s  "
+        f"persist={times['persist']:.2f}s  flag={times['flag']:.2f}s  extract={times['extract']:.2f}s\n"
         f"  db       : {settings.sqlite_path}"
     )
 

@@ -109,7 +109,7 @@ def _is_boilerplate_line(line: str) -> bool:
     return False
 
 
-def _parse_jina_response(raw: str) -> str:
+def _parse_jina_response(raw: str) -> Tuple[str, int, int]:
     """
     Strip the Jina metadata header and boilerplate, return clean prose.
 
@@ -134,11 +134,16 @@ def _parse_jina_response(raw: str) -> str:
     body = raw[idx + len(marker):].lstrip("\n") if idx != -1 else raw
 
     kept = []
+    total_lines = 0
+    discarded_lines = 0
     for line in body.splitlines():
+        total_lines += 1
         if not _is_boilerplate_line(line):
             kept.append(line)
+        else:
+            discarded_lines += 1
 
-    return _clean_markdown("\n".join(kept))
+    return _clean_markdown("\n".join(kept)), discarded_lines, total_lines
 
 
 # ── Jina fetch ────────────────────────────────────────────────────────────────
@@ -147,7 +152,7 @@ def _fetch_jina(
     url: str,
     api_key: Optional[str],
     timeout: int,
-) -> Tuple[Optional[str], Optional[str]]:
+) -> Tuple[Optional[str], Optional[str], Optional[str], float, int, int]:
     """
     Fetch and extract article text for `url` via Jina AI Reader.
 
@@ -156,8 +161,8 @@ def _fetch_jina(
     is handled in _parse_jina_response() instead.
 
     Returns:
-        (text, None)       on success — text is cleaned prose
-        (None, error_str)  on failure
+        (text, None, image_url, fetch_time, discarded_lines, total_lines) on success
+        (None, error_str, None, fetch_time, 0, 0)  on failure
     """
     jina_url = f"{JINA_READER_BASE}/{url}"
     headers: Dict[str, str] = {
@@ -168,15 +173,16 @@ def _fetch_jina(
         headers["Authorization"] = f"Bearer {api_key}"
 
     request = urllib.request.Request(jina_url, headers=headers)
+    start_time = time.perf_counter()
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             raw = response.read().decode("utf-8", errors="replace")
-        text = _parse_jina_response(raw)
+        text, discarded, total = _parse_jina_response(raw)
         
         # Additionally fetch the direct URL to scrape the image tag
         image_url = None
         try:
-            req_img = urllib.request.Request(url, headers={"User-Agent": "WeAwareIngestion/1.0"})
+            req_img = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"})
             with urllib.request.urlopen(req_img, timeout=timeout) as res_img:
                 html = res_img.read().decode("utf-8", errors="ignore")
                 soup = BeautifulSoup(html, "html.parser")
@@ -190,11 +196,12 @@ def _fetch_jina(
         except Exception:
             pass
             
-        return (text or None), None, image_url
+        fetch_time = time.perf_counter() - start_time
+        return (text or None), None, image_url, fetch_time, discarded, total
     except _NETWORK_ERRORS as exc:
-        return None, str(exc), None
+        return None, str(exc), None, time.perf_counter() - start_time, 0, 0
     except Exception as exc:
-        return None, f"unexpected: {exc}", None
+        return None, f"unexpected: {exc}", None, time.perf_counter() - start_time, 0, 0
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
@@ -221,7 +228,7 @@ def run_extraction(store, request_timeout: int = 15) -> Dict[str, int]:
     if not items:
         return {"attempted": 0, "ok": 0, "still_short": 0, "failed": 0}
 
-    summary = {"attempted": len(items), "ok": 0, "still_short": 0, "failed": 0}
+    summary = {"attempted": len(items), "ok": 0, "still_short": 0, "failed": 0, "total_jina_time": 0.0, "total_discarded": 0, "total_lines": 0}
 
     for idx, item in enumerate(items):
         url = item.get("url", "")
@@ -230,7 +237,10 @@ def run_extraction(store, request_timeout: int = 15) -> Dict[str, int]:
             summary["failed"] += 1
             continue
 
-        text, error, image_url = _fetch_jina(url, api_key, request_timeout)
+        text, error, image_url, fetch_time, discarded, total = _fetch_jina(url, api_key, request_timeout)
+        summary["total_jina_time"] += fetch_time
+        summary["total_discarded"] += discarded
+        summary["total_lines"] += total
 
         if error or not text:
             store.resolve_review_item(item["item_hash"], "failed")
@@ -250,4 +260,6 @@ def run_extraction(store, request_timeout: int = 15) -> Dict[str, int]:
         if idx < len(items) - 1:
             time.sleep(delay)
 
+    summary["avg_jina_time"] = summary["total_jina_time"] / summary["attempted"] if summary["attempted"] > 0 else 0
+    summary["boilerplate_ratio"] = summary["total_discarded"] / summary["total_lines"] if summary["total_lines"] > 0 else 0
     return summary
