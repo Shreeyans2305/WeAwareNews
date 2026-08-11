@@ -30,6 +30,9 @@ steps:
         
         # 4. Update DB
         python sync_to_postgres.py --full
+        
+        # 5. Cleanup: Kill proxy so Cloud Build doesn't hang waiting for it
+        pkill cloud-sql-proxy || true
     env:
       - 'GOOGLE_CLOUD_PROJECT=project-9ba21d45-1dfd-4108-b69'
       - 'PYTHONUNBUFFERED=1'
