@@ -1,0 +1,367 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --accent: #00f0ff;
+}
+
+body {
+  font-family: 'Kanit', 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #000;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: 'Kanit', 'Geist', sans-serif;
+}
+
+/* ——— Bold aesthetic display system (Kanit) ——— */
+.perspective-stage {
+  perspective: 1000px;
+}
+
+.display-3d {
+  display: inline-block;
+  font-family: 'Kanit', sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+  transform-style: preserve-3d;
+  will-change: transform, filter;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.55);
+  transition:
+    transform 550ms cubic-bezier(0.23, 1, 0.32, 1),
+    text-shadow 550ms ease,
+    filter 550ms ease;
+}
+
+.display-3d-gradient {
+  background: linear-gradient(
+    180deg,
+    #ffffff 10%,
+    #eafdff 42%,
+    #9df3ff 72%,
+    #00d5e8 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  filter:
+    drop-shadow(0 2px 18px rgba(0, 0, 0, 0.55))
+    drop-shadow(0 0 26px rgba(0, 240, 255, 0.22));
+}
+
+.eyebrow-kanit {
+  font-family: 'Kanit', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* Card + section titles: bold Kanit, lift on card hover via group */
+.card-title-3d {
+  font-family: 'Kanit', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  transform-style: preserve-3d;
+  will-change: transform, text-shadow;
+  transition:
+    transform 500ms cubic-bezier(0.23, 1, 0.32, 1),
+    text-shadow 500ms ease,
+    color 300ms ease;
+}
+
+/* Nav / pill buttons: chunky Kanit with 3D pop */
+.nav-3d {
+  font-family: 'Kanit', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transform-style: preserve-3d;
+  will-change: transform;
+  transition:
+    transform 350ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 250ms ease,
+    color 250ms ease,
+    text-shadow 350ms ease,
+    box-shadow 350ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .display-3d:hover {
+    transform:
+      perspective(900px)
+      rotateX(7deg)
+      rotateY(-9deg)
+      translateY(-5px)
+      translateZ(18px)
+      scale(1.025);
+    text-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.9),
+      0 2px 0 rgba(210, 245, 255, 0.7),
+      0 3px 0 rgba(0, 240, 255, 0.45),
+      0 4px 0 rgba(0, 160, 190, 0.4),
+      0 10px 22px rgba(0, 0, 0, 0.6),
+      0 0 38px rgba(0, 240, 255, 0.4);
+  }
+
+  .display-3d-gradient:hover {
+    filter:
+      drop-shadow(0 1px 0 rgba(255, 255, 255, 0.85))
+      drop-shadow(0 3px 0 rgba(0, 200, 225, 0.45))
+      drop-shadow(0 12px 24px rgba(0, 0, 0, 0.6))
+      drop-shadow(0 0 42px rgba(0, 240, 255, 0.55));
+  }
+
+  .nav-3d:hover {
+    transform:
+      perspective(600px)
+      translateY(-2px)
+      translateZ(14px)
+      scale(1.09);
+    text-shadow:
+      0 1px 0 rgba(0, 0, 0, 0.55),
+      0 8px 20px rgba(0, 240, 255, 0.35);
+  }
+
+  .group:hover .card-title-3d {
+    transform:
+      perspective(700px)
+      rotateX(4deg)
+      rotateY(-5deg)
+      translateY(-3px)
+      translateZ(10px);
+    text-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.65),
+      0 2px 0 rgba(0, 240, 255, 0.35),
+      0 8px 20px rgba(0, 0, 0, 0.55),
+      0 0 26px rgba(0, 240, 255, 0.28);
+  }
+
+  .lift:hover .card-title-3d {
+    color: #eafdff;
+  }
+}
+
+::selection {
+  background: rgba(0, 240, 255, 0.28);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Live agent status pulse — 2s ease-in-out infinite */
+@keyframes signal-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(0, 240, 255, 0.55);
+  }
+  50% {
+    opacity: 0.55;
+    box-shadow: 0 0 0 6px rgba(0, 240, 255, 0);
+  }
+}
+
+.signal-dot {
+  animation: signal-pulse 2s ease-in-out infinite;
+}
+
+/* Page transition: spatial consistency when switching views.
+   transform + opacity only, 380ms ease-out. */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-enter {
+  animation: page-in 380ms var(--ease-out) both;
+}
+
+/* Scroll reveal: prevents jarring pop-in for below-fold sections. */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 450ms var(--ease-out),
+    transform 450ms var(--ease-out);
+  will-change: opacity, transform;
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Staggered card entrance: 60ms step keeps list legible without cascade overload. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.stagger-item {
+  animation: rise-in 420ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+  will-change: opacity, transform;
+}
+
+/* Hero entrance: slow settle for footage poster plus stepped content rise.
+   Marketing tier, so longer durations are intentional. */
+@keyframes hero-settle {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-media {
+  animation: hero-settle 1200ms var(--ease-out) both;
+}
+
+.hero-rise {
+  animation: hero-rise 700ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 110ms);
+}
+
+/* Podcast equalizer: state indication for playing episode, transform only. */
+@keyframes eq-bounce {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.eq-bar {
+  transform-origin: bottom;
+  animation: eq-bounce 900ms ease-in-out infinite;
+}
+
+.eq-bar:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.eq-bar:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+.eq-paused .eq-bar {
+  animation-play-state: paused;
+  transform: scaleY(0.4);
+}
+
+/* Subtle card lift: feedback on hover, gated to fine pointers. */
+@media (hover: hover) and (pointer: fine) {
+  .lift {
+    transition:
+      transform 180ms var(--ease-out),
+      border-color 180ms ease,
+      background-color 180ms ease;
+  }
+
+  .lift:hover {
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .display-3d,
+  .display-3d:hover,
+  .nav-3d,
+  .nav-3d:hover,
+  .card-title-3d,
+  .group:hover .card-title-3d {
+    transform: none;
+    text-shadow: 0 2px 24px rgba(0, 0, 0, 0.55);
+    filter: none;
+    transition: none;
+  }
+
+  .display-3d-gradient,
+  .display-3d-gradient:hover {
+    filter: drop-shadow(0 2px 18px rgba(0, 0, 0, 0.55));
+  }
+
+  .page-enter,
+  .stagger-item,
+  .hero-media,
+  .hero-rise {
+    animation-duration: 200ms;
+    animation-delay: 0ms;
+  }
+
+  .page-enter,
+  .stagger-item,
+  .hero-rise {
+    animation-name: fade-only;
+  }
+
+  .hero-media {
+    animation: none;
+    opacity: 1;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: opacity 200ms ease;
+  }
+
+  .signal-dot,
+  .eq-bar {
+    animation: none;
+  }
+
+  .eq-bar {
+    transform: none;
+  }
+}
+
+@keyframes fade-only {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
