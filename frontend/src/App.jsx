@@ -1,19 +1,14 @@
 import './App.css'
-import introVideo from './assets/Intro.mov'
+import heroImage from './assets/hero.png'
 
 function App() {
   return (
     <main className="landing-page">
       <div className="video-shell">
-        <video
+        <img
           className="intro-video"
-          src={introVideo}
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="auto"
-          aria-label="Intro video"
+          src={heroImage}
+          alt="WeAware News hero"
         />
 
         <div className="video-overlay">
