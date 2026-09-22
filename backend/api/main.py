@@ -6,6 +6,7 @@ Authentication: x-api-key header (value stored in Secret Manager as 'api-key').
 Database: Cloud SQL Postgres via Cloud SQL Python Connector + pg8000 (no SQLAlchemy needed).
 """
 import os
+import re
 import logging
 from contextlib import contextmanager
 from typing import List, Optional
@@ -19,6 +20,63 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="WeAware News API")
+
+
+# ---------------------------------------------------------------------------
+# Image filtering — inline reimplementation to avoid import path issues
+# in the Cloud Run container (api/ is the working directory, not backend/)
+# ---------------------------------------------------------------------------
+
+# Bluesky avatars, logos, favicons, placeholders, tracking pixels
+_BAD_IMAGE_SUBSTRINGS = (
+    "avatar_thumbnail", "avatar/plain", "/img/avatar",
+    "/favicon", "/brand/", "/branding/", "placeholder",
+    "no-image", "noimage", "default-image", "default_image",
+    "fallback-image", "fallback_image", "generic-image",
+    "site-logo", "site_logo", "header-logo", "header_logo",
+    "nav-logo", "nav_logo", "company-logo", "company_logo",
+    "/pixel", "/beacon", "/track", "1x1",
+    "/profile_images/", "/profile_banners/", "/default_profile",
+)
+
+_BAD_IMAGE_REGEXES = [
+    re.compile(r"/[^/]*\blogo\b[^/]*\.(jpe?g|png|gif|svg|webp)", re.IGNORECASE),
+    re.compile(r"/[^/]*\bicon\b[^/]*\.(jpe?g|png|gif|svg|webp|ico)", re.IGNORECASE),
+]
+
+_ALLOWLIST_DOMAINS = {
+    "ichef.bbci.co.uk", "images.indianexpress.com", "static.toiimg.com",
+    "i.cbc.ca", "npr.brightspotcdn.com", "media.zenfs.com",
+    "dims.apnews.com", "s.yimg.com", "c.files.bbci.co.uk", "image.cnbcfm.com",
+}
+
+_LOGO_PRONE_DOMAINS = {"cdn.bsky.app"}
+
+
+def _is_valid_editorial_image(url: Optional[str]) -> bool:
+    """Check if an image URL is a real editorial photo (not a logo/avatar)."""
+    if not url or not url.strip():
+        return False
+    url_lower = url.lower()
+    try:
+        from urllib.parse import urlparse
+        hostname = urlparse(url).hostname or ""
+    except Exception:
+        return False
+    if hostname in _ALLOWLIST_DOMAINS:
+        return True
+    if hostname in _LOGO_PRONE_DOMAINS:
+        return False
+    for pattern in _BAD_IMAGE_SUBSTRINGS:
+        if pattern in url_lower:
+            return False
+    for regex in _BAD_IMAGE_REGEXES:
+        if regex.search(url):
+            return False
+    return True
+
+
+
 
 # ---------------------------------------------------------------------------
 # Secrets — loaded once at startup, cached in module-level variables
@@ -127,8 +185,14 @@ def get_next_story(db=Depends(get_db), auth=Depends(verify_api_key)):
         """
         SELECT s.story_id, s.source_count
         FROM stories s
-        WHERE s.source_count >= %s AND s.posted = false
-          AND EXISTS (SELECT 1 FROM items i WHERE i.story_id = s.story_id AND i.image_url IS NOT NULL)
+        WHERE s.source_count >= %s
+          AND s.posted = false
+          AND EXISTS (
+            SELECT 1 FROM items i
+            WHERE i.story_id = s.story_id
+              AND i.image_url IS NOT NULL
+              AND i.image_url != ''
+          )
         ORDER BY s.recency DESC
         LIMIT 1
         """,
@@ -144,7 +208,7 @@ def get_next_story(db=Depends(get_db), auth=Depends(verify_api_key)):
 
     cursor.execute(
         """
-        SELECT source_name, title, url, raw_text, region, image_url
+        SELECT source_name, title, url, raw_text, region, image_url, source_type
         FROM items
         WHERE story_id = %s
         """,
@@ -154,18 +218,44 @@ def get_next_story(db=Depends(get_db), auth=Depends(verify_api_key)):
     cursor.close()
 
     articles = []
-    image_url = None
+    # Priority-based image selection:
+    #   1. RSS/news-api images that pass the editorial filter (highest quality)
+    #   2. Any image that passes the editorial filter
+    rss_images = []
+    other_images = []
+
     for r in articles_rows:
-        # columns: source_name, title, url, raw_text, region, image_url
-        if not image_url and r[5]:
-            image_url = r[5]
+        # columns: source_name, title, url, raw_text, region, image_url, source_type
+        img = r[5]
+        source_type = r[6] if len(r) > 6 else "unknown"
+
+        if img and _is_valid_editorial_image(img):
+            if source_type in ("rss", "news_api_currents", "news_api_world_news",
+                               "news_api_gnews", "news_api_webz"):
+                rss_images.append(img)
+            else:
+                other_images.append(img)
+
         articles.append(Article(
             source_name=r[0],
             title=r[1],
             url=r[2],
-            snippet=r[3],  # Return the full text instead of just 200 chars
+            snippet=r[3],
             region=r[4],
         ))
+
+    # Pick the best available image
+    image_url = None
+    if rss_images:
+        image_url = rss_images[0]
+    elif other_images:
+        image_url = other_images[0]
+    else:
+        # No valid editorial image survived Python-level re-validation.
+        # This is rare — the SQL EXISTS filter and ingestion both pre-filter —
+        # but if it happens, return 204 rather than a placeholder.
+        cursor.close()
+        return Response(status_code=204)
 
     return StoryResponse(
         story_id=story_id,

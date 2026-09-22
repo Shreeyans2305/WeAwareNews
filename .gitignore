@@ -19,3 +19,8 @@ cloud-sql-proxy
 weaware_items.json
 .pytest_cache/
 make-workflow.txt
+# Large media files (exceed GitHub 100 MB limit)
+*.mov
+*.mp4
+*.avi
+*.mkv
