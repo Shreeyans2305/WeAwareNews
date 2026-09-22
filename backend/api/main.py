@@ -10,6 +10,7 @@ import re
 import logging
 from contextlib import contextmanager
 from typing import List, Optional
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Depends, HTTPException, Header, Response
 from pydantic import BaseModel
@@ -211,6 +212,7 @@ def get_next_story(db=Depends(get_db), auth=Depends(verify_api_key)):
         SELECT source_name, title, url, raw_text, region, image_url, source_type
         FROM items
         WHERE story_id = %s
+        ORDER BY published_at DESC NULLS LAST
         """,
         (story_id,),
     )
@@ -218,11 +220,14 @@ def get_next_story(db=Depends(get_db), auth=Depends(verify_api_key)):
     cursor.close()
 
     articles = []
-    # Priority-based image selection:
-    #   1. RSS/news-api images that pass the editorial filter (highest quality)
-    #   2. Any image that passes the editorial filter
-    rss_images = []
-    other_images = []
+    # Three-tier image scoring (items already ordered most-recent first):
+    #   1. Known editorial CDN domains (BBC/AP/CBC/NPR etc.) — highest credibility
+    #   2. RSS / news-api sources with any valid image
+    #   3. Other sources (Bluesky embedded media etc.)
+    # Within each tier the first entry wins (= most recently published article).
+    cdn_images: List[str] = []
+    rss_images: List[str] = []
+    other_images: List[str] = []
 
     for r in articles_rows:
         # columns: source_name, title, url, raw_text, region, image_url, source_type
@@ -230,10 +235,20 @@ def get_next_story(db=Depends(get_db), auth=Depends(verify_api_key)):
         source_type = r[6] if len(r) > 6 else "unknown"
 
         if img and _is_valid_editorial_image(img):
-            if source_type in ("rss", "news_api_currents", "news_api_world_news",
-                               "news_api_gnews", "news_api_webz"):
+            try:
+                hostname = urlparse(img).hostname or ""
+            except Exception:
+                hostname = ""
+
+            if hostname in _ALLOWLIST_DOMAINS:
+                # Tier 1: image served from a trusted editorial photo CDN
+                cdn_images.append(img)
+            elif source_type in ("rss", "news_api_currents", "news_api_world_news",
+                                 "news_api_gnews", "news_api_webz"):
+                # Tier 2: RSS / news-API source, valid image URL
                 rss_images.append(img)
             else:
+                # Tier 3: other sources (Bluesky embeds, scraped og:image, etc.)
                 other_images.append(img)
 
         articles.append(Article(
@@ -244,9 +259,10 @@ def get_next_story(db=Depends(get_db), auth=Depends(verify_api_key)):
             region=r[4],
         ))
 
-    # Pick the best available image
-    image_url = None
-    if rss_images:
+    # Pick the best available image (most credible tier, most recent within tier)
+    if cdn_images:
+        image_url = cdn_images[0]
+    elif rss_images:
         image_url = rss_images[0]
     elif other_images:
         image_url = other_images[0]
