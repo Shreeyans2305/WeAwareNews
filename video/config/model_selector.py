@@ -33,11 +33,13 @@ TYPICAL_TOKENS = {
 }
 
 # Candidate lists per role
-# Source URL for retirement dates:
-# https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+# Sources:
+# Lifecycle: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+# Pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing (read 2026-09-29)
 DEFAULT_CANDIDATES: Dict[str, List[ModelCandidate]] = {
     "flash": [
         # 1. Gemini 2.5 Flash (GA, retiring Oct 20, 2026)
+        # Pricing: $0.30 in / $2.50 out per 1M tokens (Table 4)
         ModelCandidate(
             model_id="gemini-2.5-flash",
             role="flash",
@@ -49,33 +51,38 @@ DEFAULT_CANDIDATES: Dict[str, List[ModelCandidate]] = {
             order_rank=1,
             source_url="https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions",
         ),
-        # 2. Gemini 3.5 Flash (GA, global endpoint)
-        ModelCandidate(
-            model_id="gemini-3.5-flash",
-            role="flash",
-            location="global",
-            retirement_date=date(2027, 6, 30),
-            price_input_per_1m=0.50,
-            price_output_per_1m=3.00,
-            is_preview=False,
-            order_rank=2,
-            source_url="https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions",
-        ),
-        # 3. Gemini 3.8 Flash (GA, introductory pricing through Dec 31, 2026)
+        # 2. Gemini 3.8 Flash (GA, promotional pricing through Dec 31, 2026)
+        # Pricing: $0.75 in / $3.75 out per 1M tokens (Table 0)
+        # Retirement: "No retirement date announced" (set conservatively to 2028-01-01)
         ModelCandidate(
             model_id="gemini-3.8-flash",
             role="flash",
             location="global",
-            retirement_date=date(2027, 12, 31),
+            retirement_date=date(2028, 1, 1),
             price_input_per_1m=0.75,
             price_output_per_1m=3.75,
             is_preview=False,
             order_rank=3,
-            source_url="https://cloud.google.com/vertex-ai/pricing",
+            source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
+        ),
+        # 3. Gemini 3.5 Flash (GA, global endpoint)
+        # Pricing: $1.50 in / $9.00 out per 1M tokens (Table 0)
+        # Retirement: "May 19, 2027 or later"
+        ModelCandidate(
+            model_id="gemini-3.5-flash",
+            role="flash",
+            location="global",
+            retirement_date=date(2027, 5, 19),
+            price_input_per_1m=1.50,
+            price_output_per_1m=9.00,
+            is_preview=False,
+            order_rank=2,
+            source_url="https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions",
         ),
     ],
     "pro": [
         # 1. Gemini 2.5 Pro (GA, retiring Oct 20, 2026)
+        # Pricing: $1.25 in / $10.00 out per 1M tokens (Table 4)
         ModelCandidate(
             model_id="gemini-2.5-pro",
             role="pro",
@@ -88,13 +95,15 @@ DEFAULT_CANDIDATES: Dict[str, List[ModelCandidate]] = {
             source_url="https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions",
         ),
         # 2. Gemini 3.1 Pro Preview (Preview, global endpoint)
+        # Pricing: $2.00 in / $12.00 out per 1M tokens (Table 0)
+        # Retirement: "May 28, 2027 or later"
         ModelCandidate(
             model_id="gemini-3.1-pro-preview",
             role="pro",
             location="global",
             retirement_date=date(2027, 5, 28),
-            price_input_per_1m=1.50,
-            price_output_per_1m=10.00,
+            price_input_per_1m=2.00,
+            price_output_per_1m=12.00,
             is_preview=True,
             order_rank=2,
             source_url="https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions",
@@ -209,3 +218,20 @@ def select_model(
         estimated_cost_usd=chosen_cost,
         candidate=chosen,
     )
+
+
+def check_veo_lifecycle(today: Optional[date] = None) -> None:
+    """Warns if Veo 3.1 models are within 14 days of retirement date (Nov 17, 2026 or later).
+    Source: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+    Baseline stays locked at veo-3.1-fast-generate-001 (720p); changing requires user approval.
+    """
+    if today is None:
+        today = datetime.now(timezone.utc).date()
+    veo_retirement = date(2026, 11, 17)
+    days_left = (veo_retirement - today).days
+    if days_left <= 14:
+        logger.warning(
+            f"VEO LIFECYCLE ALERT: Veo 3.1 baseline models are within {days_left} days of retirement "
+            f"date ({veo_retirement}). Baseline stays locked; human approval required to update."
+        )
+

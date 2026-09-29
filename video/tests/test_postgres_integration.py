@@ -555,3 +555,93 @@ def test_real_pg_url_canonicalization_utm_dedupe(pg_client):
         stored_urls = row[0]
         assert stored_urls == ["https://reuters.com/1"], f"Stored URLs were not canonicalized: {stored_urls}"
     conn.close()
+
+
+def test_video_runs_schema_contract(setup_pg_database):
+    """Schema-contract test: introspects the table created by 001_create_video_runs.sql
+    and fails if any referenced column, type, index, or status is missing.
+    """
+    REQUIRED_COLUMNS = {
+        "run_id": "uuid",
+        "story_id": "text",
+        "status": "text",
+        "claim_mode": "text",
+        "claimed_at": "timestamp with time zone",
+        "expires_at": "timestamp with time zone",
+        "heartbeat_at": "timestamp with time zone",
+        "headline_snapshot": "text",
+        "sources_snapshot": "jsonb",
+        "source_urls": "ARRAY",
+        "story_text_snapshot": "text",
+        "review_token_hash": "text",
+        "review_decision_at": "timestamp with time zone",
+        "video_gcs_uri": "text",
+        "thumbnail_gcs_uri": "text",
+        "caption": "text",
+        "hashtags": "ARRAY",
+        "script_data": "jsonb",
+        "claims_data": "jsonb",
+        "run_metadata": "jsonb",
+        "idempotency_key": "text",
+        "estimated_cost_usd": "numeric",
+        "veo_seconds_used": "integer",
+        "error_message": "text",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+    }
+    REQUIRED_STATUSES = [
+        "claimed", "scripting", "generating_video", "post_processing",
+        "ready_for_review", "approved", "publishing", "published",
+        "rejected", "failed"
+    ]
+
+    conn = psycopg2.connect(TEST_DB_URL)
+    with conn.cursor() as cur:
+        # Introspect columns
+        cur.execute(
+            """
+            SELECT column_name, data_type
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'video_runs';
+            """
+        )
+        actual_cols = {row[0]: row[1] for row in cur.fetchall()}
+        for col, expected_type in REQUIRED_COLUMNS.items():
+            assert col in actual_cols, f"Missing required column: {col}"
+            assert actual_cols[col] == expected_type, (
+                f"Column {col} has type {actual_cols[col]}, expected {expected_type}"
+            )
+
+        # Introspect indexes
+        cur.execute(
+            """
+            SELECT indexname, indexdef
+            FROM pg_indexes
+            WHERE tablename = 'video_runs';
+            """
+        )
+        indexes = {row[0]: row[1] for row in cur.fetchall()}
+        assert "idx_video_runs_active_story" in indexes
+        assert "idx_video_runs_source_urls" in indexes
+        assert "idx_video_runs_expires_at" in indexes
+
+        # Verify active index includes publishing and published
+        active_idx_def = indexes["idx_video_runs_active_story"]
+        assert "publishing" in active_idx_def
+        assert "published" in active_idx_def
+
+        # Verify all statuses are insertable
+        for st in REQUIRED_STATUSES:
+            run_id = str(uuid.uuid4())
+            cur.execute(
+                """
+                INSERT INTO video_runs (
+                    run_id, story_id, status, expires_at,
+                    headline_snapshot, story_text_snapshot
+                ) VALUES (%s, %s, %s, NOW() + INTERVAL '1 hour', 'Test', 'Test text')
+                """,
+                (run_id, f"story-{run_id}", st),
+            )
+    conn.rollback()
+    conn.close()
+
