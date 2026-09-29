@@ -1,0 +1,41 @@
+# WeAware Late Night - Studio Set & Anchor Registry
+version: "1.0"
+
+set:
+  id: "studio_main"
+  name: "Late Night Satire Studio"
+  description: >-
+    Broadcast late-night talk show studio with warm walnut wood curved desk,
+    accent neon rim lighting in cyan and deep amber, blurred evening metropolis
+    skyline through floor-to-ceiling glass in the deep background, sleek modern
+    microphones, broadcast studio TV lighting, vertical 9:16 framing.
+  reference_image_gcs_uri: "gs://{bucket}/assets/sets/studio_main.png"
+
+anchors:
+  - id: "marcus"
+    name: "Marcus Vance"
+    role: "Host"
+    description: >-
+      Charismatic late-night comedy host in his late 30s with neatly styled dark hair,
+      subtle stubble, expressive arched eyebrows, wearing a tailored navy wool suit
+      jacket, crisp light blue open-collar dress shirt, deadpan comedic expressions,
+      looking directly into the lens with a knowing smirk.
+    voice_description: >-
+      Mid-Atlantic baritone, crisp broadcast articulation, deadpan ironic timing,
+      punchy comedic cadence.
+    framings:
+      medium: "gs://{bucket}/assets/anchors/marcus_medium.png"
+      wide: "gs://{bucket}/assets/anchors/marcus_wide.png"
+
+  - id: "maya"
+    name: "Maya Lin"
+    role: "Senior Satirical Correspondent"
+    description: >-
+      Sharp, energetic investigative correspondent in her early 30s with shoulder-length
+      sleek dark hair, sharp intelligent gaze, wearing a vibrant plum blazer over a dark
+      silk top, sitting at the desk extension, animated conversational gestures with a pen.
+    voice_description: >-
+      Dynamic mezzo-soprano, fast-paced witty inflection, sarcastic investigative tone.
+    framings:
+      medium: "gs://{bucket}/assets/anchors/maya_medium.png"
+      wide: "gs://{bucket}/assets/anchors/maya_wide.png"
