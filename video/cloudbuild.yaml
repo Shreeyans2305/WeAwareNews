@@ -1,0 +1,30 @@
+# Cloud Build configuration for WeAware Video images
+# Usage: gcloud builds submit --config=video/cloudbuild.yaml .
+
+steps:
+  # 1. Build weaware-video-api (lean, without ffmpeg)
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/weaware-repo/weaware-video-api:$SHORT_SHA'
+      - '-f'
+      - 'video/Dockerfile.api'
+      - '.'
+
+  # 2. Build weaware-video-job (with ffmpeg)
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/weaware-repo/weaware-video-job:$SHORT_SHA'
+      - '-f'
+      - 'video/Dockerfile.job'
+      - '.'
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/weaware-repo/weaware-video-api:$SHORT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/weaware-repo/weaware-video-job:$SHORT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

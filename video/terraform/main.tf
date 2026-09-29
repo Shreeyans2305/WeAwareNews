@@ -68,6 +68,13 @@ resource "google_project_iam_member" "video_aiplatform" {
   member  = "serviceAccount:${google_service_account.video_sa.email}"
 }
 
+# Video SA: Cloud SQL client for database access
+resource "google_project_iam_member" "video_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.video_sa.email}"
+}
+
 # Video SA: Scoped strictly to the new video GCS bucket
 resource "google_storage_bucket_iam_member" "video_bucket_admin" {
   bucket = google_storage_bucket.video_assets.name
@@ -90,6 +97,44 @@ resource "google_secret_manager_secret_iam_member" "video_api_key_access" {
   member    = "serviceAccount:${google_service_account.video_sa.email}"
 }
 
+# Video SA: Secret Manager Accessor for db-password
+resource "google_secret_manager_secret_iam_member" "video_db_pass_access" {
+  project   = var.project_id
+  secret_id = "db-password"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.video_sa.email}"
+}
+
+# New Secret: video-hmac-secret
+resource "google_secret_manager_secret" "video_hmac_secret" {
+  secret_id = "video-hmac-secret"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "video_hmac_access" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.video_hmac_secret.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.video_sa.email}"
+}
+
+# New Secret: video-webhook-url
+resource "google_secret_manager_secret" "video_webhook_url" {
+  secret_id = "video-webhook-url"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "video_webhook_access" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.video_webhook_url.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.video_sa.email}"
+}
+
 # Workflows SA: Cloud Build viewer for guard checks
 resource "google_project_iam_member" "workflows_build_viewer" {
   project = var.project_id
@@ -97,11 +142,20 @@ resource "google_project_iam_member" "workflows_build_viewer" {
   member  = "serviceAccount:${google_service_account.workflows_sa.email}"
 }
 
-# Workflows SA: Run Developer to trigger Cloud Run Job
-resource "google_project_iam_member" "workflows_run_dev" {
-  project = var.project_id
-  role    = "roles/run.developer"
-  member  = "serviceAccount:${google_service_account.workflows_sa.email}"
+# Workflows SA: Secret Manager Accessor for api-key (to call /debug/stats in guard)
+resource "google_secret_manager_secret_iam_member" "workflows_api_key_access" {
+  project   = var.project_id
+  secret_id = "api-key"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.workflows_sa.email}"
+}
+
+# Workflows SA: Scoped strictly to the specific Cloud Run Job (not project-wide)
+resource "google_cloud_run_v2_job_iam_member" "workflows_job_developer" {
+  location = var.region
+  name     = google_cloud_run_v2_job.video_job.name
+  role     = "roles/run.developer"
+  member   = "serviceAccount:${google_service_account.workflows_sa.email}"
 }
 
 # Workflows SA: Impersonate Video SA for Cloud Run execution
@@ -130,6 +184,24 @@ resource "google_pubsub_topic_iam_member" "video_pubsub_publisher" {
   topic  = google_pubsub_topic.video_reviews.name
   role   = "roles/pubsub.publisher"
   member = "serviceAccount:${google_service_account.video_sa.email}"
+}
+
+# ---------------------------------------------------------------------------
+# 5. Cloud Run Service: weaware-video-api (Option A)
+# ---------------------------------------------------------------------------
+
+# Public Invocation: weaware-video-api allows allUsers at the Cloud Run IAM layer
+# because:
+# 1. /videos/review must be clickable from emails/notifications by human reviewers without Google auth.
+# 2. Make.com polls /videos/next-approved without GCP IAM credentials.
+# All security is strictly enforced at application layer:
+# - Machine endpoints (/stories/*, /videos/next-approved, /videos/{id}/mark-published) require x-api-key.
+# - Human review (/videos/review) requires valid, single-use, unexpired HMAC-SHA256 tokens and has sliding window rate limiting.
+resource "google_cloud_run_v2_service_iam_member" "video_api_public_access" {
+  location = google_cloud_run_v2_service.video_api.location
+  name     = google_cloud_run_v2_service.video_api.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
 }
 
 # ---------------------------------------------------------------------------

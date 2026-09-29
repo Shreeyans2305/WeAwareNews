@@ -65,6 +65,34 @@ def upload_asset_to_gcs(local_path: Path, gcs_uri: str) -> None:
     print(f"✓ Uploaded {gcs_uri}")
 
 
+def create_contact_sheet(plate_paths: Dict[str, Path], output_path: Path) -> Path:
+    from PIL import Image, ImageDraw
+
+    # All plates are 9:16 (e.g. 720x1280 or similar).
+    # Resize thumbnails to 360x640 for the contact sheet.
+    thumb_w, thumb_h = 360, 640
+    padding = 20
+    header_h = 50
+    total_w = (thumb_w * len(plate_paths)) + (padding * (len(plate_paths) + 1))
+    total_h = thumb_h + (padding * 2) + header_h
+
+    sheet = Image.new("RGB", (total_w, total_h), color=(15, 23, 42))  # slate-900 background
+    draw = ImageDraw.Draw(sheet)
+
+    for idx, (label, path) in enumerate(plate_paths.items()):
+        if path.exists():
+            img = Image.open(path)
+            thumb = img.resize((thumb_w, thumb_h), Image.Resampling.LANCZOS)
+            x = padding + idx * (thumb_w + padding)
+            y = padding + header_h
+            sheet.paste(thumb, (x, y))
+            draw.text((x + 10, padding + 15), label, fill=(248, 250, 252))
+
+    sheet.save(output_path)
+    print(f"✓ Created master contact sheet at {output_path}")
+    return output_path
+
+
 def run_bootstrap(confirm: bool = False, local_only: bool = False):
     config = load_anchors_config()
     set_def = config["set"]
@@ -99,6 +127,8 @@ def run_bootstrap(confirm: bool = False, local_only: bool = False):
         location=settings.location,
     )
 
+    generated_plates: Dict[str, Path] = {}
+
     # 1. Generate Set Plate
     print("\n--- 1. Generating Set Plate ---")
     set_prompt = (
@@ -109,6 +139,7 @@ def run_bootstrap(confirm: bool = False, local_only: bool = False):
     set_bytes = generate_image_with_modalities(client, set_prompt)
     set_path = ASSETS_DIR / "sets" / f"{set_def['id']}.png"
     set_path.write_bytes(set_bytes)
+    generated_plates["Studio Main (Set)"] = set_path
     print(f"✓ Saved {set_path}")
 
     if not local_only:
@@ -131,6 +162,7 @@ def run_bootstrap(confirm: bool = False, local_only: bool = False):
         med_bytes = generate_image_with_modalities(client, medium_prompt, reference_image_bytes=set_bytes)
         med_path = ASSETS_DIR / "anchors" / f"{aid}_medium.png"
         med_path.write_bytes(med_bytes)
+        generated_plates[f"{aname} (Medium)"] = med_path
         print(f"✓ Saved {med_path}")
 
         # Wide framing
@@ -143,6 +175,7 @@ def run_bootstrap(confirm: bool = False, local_only: bool = False):
         wide_bytes = generate_image_with_modalities(client, wide_prompt, reference_image_bytes=set_bytes)
         wide_path = ASSETS_DIR / "anchors" / f"{aid}_wide.png"
         wide_path.write_bytes(wide_bytes)
+        generated_plates[f"{aname} (Wide)"] = wide_path
         print(f"✓ Saved {wide_path}")
 
         if not local_only:
@@ -151,7 +184,13 @@ def run_bootstrap(confirm: bool = False, local_only: bool = False):
             upload_asset_to_gcs(med_path, gcs_med)
             upload_asset_to_gcs(wide_path, gcs_wide)
 
-    print("\n✓ Bootstrap complete! All anchor and set plates generated.")
+    # 3. Create Master Contact Sheet
+    contact_sheet_path = ASSETS_DIR / "contact_sheet.png"
+    create_contact_sheet(generated_plates, contact_sheet_path)
+    if not local_only:
+        upload_asset_to_gcs(contact_sheet_path, f"gs://{settings.gcs_bucket}/assets/contact_sheet.png")
+
+    print("\n✓ Bootstrap complete! All anchor, set, and contact sheet plates generated.")
 
 
 if __name__ == "__main__":

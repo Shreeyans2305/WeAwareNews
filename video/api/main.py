@@ -343,15 +343,32 @@ def update_video_status(
             return {"status": "ok", "run_id": run_id, "current_status": req.new_status}
 
 
+# In-memory sliding window rate limiter for review endpoints
+_review_rate_limit: Dict[str, List[float]] = {}
+
+
+def check_rate_limit(client_ip: str, limit: int = 20, window_seconds: int = 60):
+    now = time.time()
+    timestamps = _review_rate_limit.setdefault(client_ip, [])
+    _review_rate_limit[client_ip] = [t for t in timestamps if now - t < window_seconds]
+    if len(_review_rate_limit[client_ip]) >= limit:
+        raise HTTPException(status_code=429, detail="Too many review attempts. Please slow down.")
+    _review_rate_limit[client_ip].append(now)
+
+
 @app.get("/videos/review", response_class=HTMLResponse)
 def get_video_review_page(
+    request: Request,
     token: str = Query(...),
     action: str = Query(..., pattern="^(approve|reject)$"),
 ):
     """
     Confirm page only (NO state change on GET).
-    Verifies HMAC token and renders human approval confirmation UI.
+    Verifies HMAC token and renders human approval confirmation UI with QA checklist.
     """
+    client_ip = request.client.host if request.client else "unknown"
+    check_rate_limit(client_ip)
+
     valid, run_id, token_action, err = verify_review_token(token)
     if not valid or token_action != action:
         return HTMLResponse(
@@ -389,9 +406,12 @@ def get_video_review_page(
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>
                     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; display: flex; justify-content: center; }}
-                    .card {{ background: #1e293b; border-radius: 12px; max-width: 500px; width: 100%; padding: 24px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); }}
+                    .card {{ background: #1e293b; border-radius: 12px; max-width: 520px; width: 100%; padding: 24px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); }}
                     h2 {{ margin-top: 0; color: #38bdf8; font-size: 1.25rem; }}
-                    .caption {{ background: #0f172a; border-radius: 8px; padding: 12px; font-size: 0.9rem; color: #94a3b8; white-space: pre-wrap; margin-bottom: 20px; }}
+                    .caption {{ background: #0f172a; border-radius: 8px; padding: 12px; font-size: 0.9rem; color: #94a3b8; white-space: pre-wrap; margin-bottom: 16px; }}
+                    .checklist {{ background: #0f172a; border-radius: 8px; padding: 12px; font-size: 0.85rem; color: #cbd5e1; margin-bottom: 20px; }}
+                    .checklist h4 {{ margin: 0 0 8px 0; color: #f59e0b; font-size: 0.9rem; }}
+                    .checklist label {{ display: block; margin-bottom: 6px; cursor: pointer; }}
                     .uri {{ font-size: 0.8rem; color: #64748b; margin-bottom: 20px; word-break: break-all; }}
                     button {{ background: {btn_color}; color: white; border: none; padding: 14px 24px; border-radius: 8px; font-size: 1rem; font-weight: bold; width: 100%; cursor: pointer; transition: opacity 0.2s; }}
                     button:hover {{ opacity: 0.9; }}
@@ -402,6 +422,15 @@ def get_video_review_page(
                     <h2>WeAware Late Night Review ({action.upper()})</h2>
                     <p><b>Headline:</b> {headline}</p>
                     <div class="caption"><b>Caption:</b><br>{caption}</div>
+                    
+                    <div class="checklist">
+                        <h4>Pre-Publication QA Checklist</h4>
+                        <label><input type="checkbox" checked> Face & voice consistent across all clips</label>
+                        <label><input type="checkbox" checked> Dialogue accurately matches script</label>
+                        <label><input type="checkbox" checked> Factual claims match corroborated source articles</label>
+                        <label><input type="checkbox" checked> Subtitles & lower-third stay within mobile-safe margins</label>
+                    </div>
+
                     <div class="uri"><b>Video GCS:</b> {video_uri}</div>
                     <form method="POST" action="/videos/review">
                         <input type="hidden" name="token" value="{token}">
@@ -422,6 +451,9 @@ async def commit_video_review(request: Request):
     Accepts JSON or Form data with {token, action}.
     Enforces single-use token by transitioning status from ready_for_review.
     """
+    client_ip = request.client.host if request.client else "unknown"
+    check_rate_limit(client_ip)
+
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:
         body = await request.json()
