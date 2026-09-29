@@ -139,7 +139,9 @@ make-workflow.txt
 *.mp4
 *.avi
 *.mkv
-
 # ─── Misc ───
 *.tgz
 *.zip
+
+video/scratch/
+
