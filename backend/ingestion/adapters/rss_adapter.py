@@ -112,6 +112,45 @@ class RSSAdapter:
             if not raw_text:
                 raw_text = strip_html(entry.get("summary", ""))
 
+            # ── Image extraction from RSS media fields ──────────────────
+            # Many feeds embed article images via <media:content> or
+            # <enclosure> — feedparser exposes these as structured fields.
+            # Extracting them here means stories have images at ingest time
+            # without needing a separate og:image scrape step.
+            image_url: Optional[str] = None
+
+            # 1. <media:content url="..." medium="image">
+            if not image_url and entry.get("media_content"):
+                for m in entry["media_content"]:
+                    m_type = m.get("type", "")
+                    m_medium = m.get("medium", "")
+                    if (
+                        m_medium == "image"
+                        or m_type.startswith("image/")
+                        or (not m_type and not m_medium and m.get("url"))
+                    ):
+                        image_url = m.get("url") or None
+                        if image_url:
+                            break
+
+            # 2. <enclosure type="image/..."> (common in RSS 2.0)
+            if not image_url and entry.get("enclosures"):
+                for enc in entry["enclosures"]:
+                    if enc.get("type", "").startswith("image/"):
+                        image_url = enc.get("href") or enc.get("url") or None
+                        if image_url:
+                            break
+
+            # 3. <media:thumbnail>
+            if not image_url and entry.get("media_thumbnail"):
+                for thumb in entry["media_thumbnail"]:
+                    image_url = thumb.get("url") or None
+                    if image_url:
+                        break
+
+            if image_url:
+                image_url = image_url.strip() or None
+
             entries.append(
                 {
                     "title": normalize_text(entry.get("title", "")),
@@ -120,6 +159,7 @@ class RSSAdapter:
                     "author": entry.get("author") or None,
                     "published_at": published_iso,
                     "lang": entry.get("language") or "",
+                    "image_url": image_url,
                 }
             )
 
@@ -173,6 +213,7 @@ class RSSAdapter:
                         "lang": entry.get("lang") or "en",
                         "paywall": bool(source.get("paywall", False)),
                         "is_social": False,
+                        "image_url": entry.get("image_url"),
                     }
                 )
 

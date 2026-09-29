@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+
+# Databases
+*.db
+*.db-wal
+*.db-shm
+ingestion/store/*.db
+
+# Local tools / binaries
+cloud-sql-proxy
+.pytest_cache/
+tests/
