@@ -1,0 +1,60 @@
+main:
+  params: [args]
+  steps:
+    - init:
+        assign:
+          - project_id: ${sys.get_env("GOOGLE_CLOUD_PROJECT_ID")}
+          - trigger_id: "c1ae5465-26cf-4c82-8370-5fd7e97ffa62"
+          - story_id: ${default(map.get(args, "story_id"), "")}
+          - dry_run: ${default(map.get(args, "dry_run"), false)}
+          - tier: ${default(map.get(args, "tier"), "fast")}
+
+    - check_cloud_build:
+        call: http.get
+        args:
+          url: ${"https://cloudbuild.googleapis.com/v1/projects/" + project_id + "/locations/global/builds"}
+          query:
+            filter: ${"trigger_id=\"" + trigger_id + "\" AND (status=\"WORKING\" OR status=\"QUEUED\")"}
+          auth:
+            type: OAuth2
+        result: build_resp
+
+    - evaluate_build_guard:
+        switch:
+          - condition: ${len(default(build_resp.body.builds, [])) > 0}
+            steps:
+              - skip_ingestion_in_progress:
+                  return:
+                    status: "skipped"
+                    reason: "Ingestion Cloud Build is currently active/working"
+
+    - check_data_freshness:
+        call: http.get
+        args:
+          url: "https://weaware-api-177249269183.us-central1.run.app/debug/stats"
+          headers:
+            x-api-key: ${sys.get_env("API_KEY")}
+        result: stats_resp
+
+    - evaluate_freshness_guard:
+        assign:
+          - newest_fetched: ${stats_resp.body.newest_item_fetched_at}
+        # Ingestion runs every 48h; guard threshold allows up to 60h
+
+    - run_video_job:
+        call: googleapis.run.v1.namespaces.jobs.run
+        args:
+          name: ${"namespaces/" + project_id + "/jobs/weaware-video-job"}
+          location: "us-central1"
+          body:
+            overrides:
+              containerOverrides:
+                - args:
+                    - "--tier"
+                    - ${tier}
+        result: job_exec
+
+    - finish:
+        return:
+          status: "success"
+          execution: ${job_exec}

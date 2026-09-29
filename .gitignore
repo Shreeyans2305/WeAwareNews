@@ -145,3 +145,9 @@ make-workflow.txt
 
 video/scratch/
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*tfplan.txt
