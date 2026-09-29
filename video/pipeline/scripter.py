@@ -61,6 +61,13 @@ WORD BUDGET RULE (CRITICAL FOR LIP-SYNC & PACING):
 - Pacing budget is ~2.5 words per second.
 - For an 8-second clip, the dialogue MUST be between 16 and 22 words MAXIMUM.
 - Keep lines concise, snappy, and comedic.
+
+PRONUNCIATION-SAFE DIALOGUE RULES:
+1. Use common, everyday words that flow naturally when spoken aloud.
+2. Avoid rare jargon, tongue-twisters, technical acronyms, and convoluted phrasing.
+3. Avoid brand names or foreign terms that require awkward pronunciation or spelling.
+4. DO NOT put letter-spelling hints or bracketed pronunciation in dialogue (e.g., do NOT write "W-E-A-W-A-R-E" or "[wee-aw-air]").
+5. ALWAYS write numbers as spoken words (e.g. write "twenty-five" instead of "25", "one point two million" instead of "1.2M", "five hundred" instead of "500").
 """
 
 

@@ -23,46 +23,20 @@ from video.pipeline.veo_client import VeoClient, ClaimCancelledError
 from video.pipeline.scripter import assemble_veo_prompt, ClipScript
 from video.bootstrap_assets import load_anchors_config
 
+from backend.ingestion.store.postgres_store import _SCHEMA as PROD_PG_SCHEMA
+
 TEST_DB_URL = os.getenv("TEST_DATABASE_URL", "postgresql://postgres:testpass@127.0.0.1:5434/weaware_test")
 
 
 @pytest.fixture(scope="session")
 def setup_pg_database():
-    """Ensure test tables exist in local PostgreSQL."""
+    """Ensure test tables exist in local PostgreSQL using production schema."""
     conn = psycopg2.connect(TEST_DB_URL)
     with conn.cursor() as cur:
-        # Base tables
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS stories (
-            story_id     TEXT PRIMARY KEY,
-            source_count INTEGER NOT NULL,
-            recency      TEXT NOT NULL,
-            created_at   TEXT NOT NULL,
-            centroid     TEXT,
-            posted       BOOLEAN NOT NULL DEFAULT FALSE
-        );
-        CREATE TABLE IF NOT EXISTS items (
-            item_hash                   TEXT PRIMARY KEY,
-            source_id                   TEXT NOT NULL,
-            source_name                 TEXT NOT NULL,
-            source_type                 TEXT NOT NULL,
-            region                      TEXT NOT NULL,
-            url                         TEXT NOT NULL,
-            title                       TEXT,
-            raw_text                    TEXT,
-            published_at                TEXT,
-            fetched_at                  TEXT NOT NULL,
-            author                      TEXT,
-            lang                        TEXT,
-            paywall                     INTEGER NOT NULL DEFAULT 0,
-            is_social                   INTEGER NOT NULL DEFAULT 0,
-            extraction_status           TEXT NOT NULL DEFAULT 'ok',
-            story_id                    TEXT,
-            has_cross_source_corroboration INTEGER NOT NULL DEFAULT 0,
-            image_url                   TEXT
-        );
-        """)
-        # Migration DDL
+        # Load official production schema from backend/ingestion/store/postgres_store.py
+        cur.execute(PROD_PG_SCHEMA)
+        
+        # Migration DDL (with lock_timeout)
         migration_sql = Path("video/migrations/001_create_video_runs.sql").read_text()
         cur.execute(migration_sql)
     conn.commit()
@@ -302,6 +276,144 @@ def test_heartbeat_expiry_stopping_veo_calls():
     client = VeoClient(run_id="test-run", heartbeat_callback=revoked_claim_heartbeat)
     with pytest.raises(ClaimCancelledError):
         client.check_budget_and_claim(upcoming_seconds=8)
+
+
+def test_real_pg_candidates_full_filters(pg_client):
+    """
+    Test the candidate retrieval query against real PostgreSQL exercising ALL 5 filters:
+    1. Paywall exclusion: paywall = 1
+    2. Social exclusion: is_social = 1
+    3. Thin text exclusion: length(trim(raw_text)) < 150
+    4. Publisher count: must have >= 2 distinct publishers
+    5. URL overlap: no overlap with recent video_runs within dedupe_days
+    6. Valid candidate: passes all filters, correctly returns VideoCandidateResponse
+    """
+    conn = psycopg2.connect(TEST_DB_URL)
+    with conn.cursor() as cur:
+        # Clear existing test data
+        cur.execute("DELETE FROM items;")
+        cur.execute("DELETE FROM video_runs;")
+        cur.execute("DELETE FROM stories;")
+
+        # A recent video run with a specific URL
+        recent_overlap_url = "https://bloomberg.com/news/overlapping-article"
+        cur.execute(
+            """
+            INSERT INTO video_runs (
+                run_id, story_id, status, claim_mode, claimed_at, expires_at,
+                heartbeat_at, headline_snapshot, story_text_snapshot, source_urls,
+                created_at, updated_at
+            )
+            VALUES (
+                %s, 'old-story-1', 'published', 'separate', NOW() - INTERVAL '3 days',
+                NOW() + INTERVAL '1 day', NOW(), 'Old Headline', 'Old text',
+                ARRAY[%s], NOW() - INTERVAL '3 days', NOW() - INTERVAL '3 days'
+            )
+            """,
+            (str(uuid.uuid4()), recent_overlap_url),
+        )
+
+        valid_text = (
+            "This is a comprehensive, high-quality, long-form journalism report detailing the latest corporate "
+            "antitrust rulings and international regulatory updates across all participating economies worldwide."
+        )
+
+        # Case 1: Paywall story (one free, one paywalled -> only 1 publisher survives)
+        cur.execute("INSERT INTO stories VALUES ('story-paywall', 2, '2026-09-29T10:00:00Z', NOW(), NULL, FALSE)")
+        cur.execute(
+            """
+            INSERT INTO items (item_hash, source_id, source_name, source_type, region, url, title, raw_text, published_at, fetched_at, paywall, is_social, extraction_status, story_id)
+            VALUES 
+            (%s, 's1', 'Publisher A', 'rss', 'us', 'https://pub-a.com/1', 'Article A', %s, NOW(), NOW(), 0, 0, 'ok', 'story-paywall'),
+            (%s, 's2', 'Publisher B', 'rss', 'us', 'https://pub-b.com/2', 'Article B', %s, NOW(), NOW(), 1, 0, 'ok', 'story-paywall')
+            """,
+            (str(uuid.uuid4()), valid_text, str(uuid.uuid4()), valid_text),
+        )
+
+        # Case 2: Social story (one free, one social -> only 1 publisher survives)
+        cur.execute("INSERT INTO stories VALUES ('story-social', 2, '2026-09-29T10:00:00Z', NOW(), NULL, FALSE)")
+        cur.execute(
+            """
+            INSERT INTO items (item_hash, source_id, source_name, source_type, region, url, title, raw_text, published_at, fetched_at, paywall, is_social, extraction_status, story_id)
+            VALUES 
+            (%s, 's3', 'Publisher C', 'rss', 'us', 'https://pub-c.com/1', 'Article C', %s, NOW(), NOW(), 0, 0, 'ok', 'story-social'),
+            (%s, 's4', 'Publisher D', 'social', 'us', 'https://pub-d.com/2', 'Article D', %s, NOW(), NOW(), 0, 1, 'ok', 'story-social')
+            """,
+            (str(uuid.uuid4()), valid_text, str(uuid.uuid4()), valid_text),
+        )
+
+        # Case 3: Thin text story (one valid, one thin < 150 chars -> only 1 publisher survives)
+        cur.execute("INSERT INTO stories VALUES ('story-thin', 2, '2026-09-29T10:00:00Z', NOW(), NULL, FALSE)")
+        cur.execute(
+            """
+            INSERT INTO items (item_hash, source_id, source_name, source_type, region, url, title, raw_text, published_at, fetched_at, paywall, is_social, extraction_status, story_id)
+            VALUES 
+            (%s, 's5', 'Publisher E', 'rss', 'us', 'https://pub-e.com/1', 'Article E', %s, NOW(), NOW(), 0, 0, 'ok', 'story-thin'),
+            (%s, 's6', 'Publisher F', 'rss', 'us', 'https://pub-f.com/2', 'Article F', 'Too short text', NOW(), NOW(), 0, 0, 'ok', 'story-thin')
+            """,
+            (str(uuid.uuid4()), valid_text, str(uuid.uuid4())),
+        )
+
+        # Case 4: Single publisher story (both articles from same publisher -> only 1 publisher)
+        cur.execute("INSERT INTO stories VALUES ('story-single-pub', 2, '2026-09-29T10:00:00Z', NOW(), NULL, FALSE)")
+        cur.execute(
+            """
+            INSERT INTO items (item_hash, source_id, source_name, source_type, region, url, title, raw_text, published_at, fetched_at, paywall, is_social, extraction_status, story_id)
+            VALUES 
+            (%s, 's7', 'SamePublisher', 'rss', 'us', 'https://same.com/1', 'Article G', %s, NOW(), NOW(), 0, 0, 'ok', 'story-single-pub'),
+            (%s, 's8', 'SamePublisher', 'rss', 'us', 'https://same.com/2', 'Article H', %s, NOW(), NOW(), 0, 0, 'ok', 'story-single-pub')
+            """,
+            (str(uuid.uuid4()), valid_text, str(uuid.uuid4()), valid_text),
+        )
+
+        # Case 5: Overlapping story (has 2 publishers, but one URL overlaps with recent run)
+        cur.execute("INSERT INTO stories VALUES ('story-overlap', 2, '2026-09-29T10:00:00Z', NOW(), NULL, FALSE)")
+        cur.execute(
+            """
+            INSERT INTO items (item_hash, source_id, source_name, source_type, region, url, title, raw_text, published_at, fetched_at, paywall, is_social, extraction_status, story_id)
+            VALUES 
+            (%s, 's9', 'Publisher I', 'rss', 'us', %s, 'Article I', %s, NOW(), NOW(), 0, 0, 'ok', 'story-overlap'),
+            (%s, 's10', 'Publisher J', 'rss', 'us', 'https://pub-j.com/2', 'Article J', %s, NOW(), NOW(), 0, 0, 'ok', 'story-overlap')
+            """,
+            (str(uuid.uuid4()), recent_overlap_url, valid_text, str(uuid.uuid4()), valid_text),
+        )
+
+        # Case 6: Valid story (passes all filters: 2 distinct publishers, text >= 150, no paywall, no social, no overlap)
+        cur.execute("INSERT INTO stories VALUES ('story-valid', 2, '2026-09-29T12:00:00Z', NOW(), NULL, FALSE)")
+        cur.execute(
+            """
+            INSERT INTO items (item_hash, source_id, source_name, source_type, region, url, title, raw_text, published_at, fetched_at, paywall, is_social, extraction_status, story_id)
+            VALUES 
+            (%s, 's11', 'Reuters', 'rss', 'us', 'https://reuters.com/clean-article-1', 'Major Tech Breakthrough', %s, NOW(), NOW(), 0, 0, 'ok', 'story-valid'),
+            (%s, 's12', 'Associated Press', 'rss', 'us', 'https://apnews.com/clean-article-2', 'Scientists Confirm Finding', %s, NOW(), NOW(), 0, 0, 'ok', 'story-valid')
+            """,
+            (str(uuid.uuid4()), valid_text, str(uuid.uuid4()), valid_text),
+        )
+
+    conn.commit()
+    conn.close()
+
+    # Query the actual FastAPI endpoint
+    resp = pg_client.get("/stories/video-candidates?dedupe_days=14")
+    assert resp.status_code == 200
+    candidates = resp.json()
+
+    candidate_ids = [c["story_id"] for c in candidates]
+    
+    # Assert all invalid cases are filtered out
+    assert "story-paywall" not in candidate_ids, "Paywalled story was not filtered out"
+    assert "story-social" not in candidate_ids, "Social story was not filtered out"
+    assert "story-thin" not in candidate_ids, "Thin text story was not filtered out"
+    assert "story-single-pub" not in candidate_ids, "Single publisher story was not filtered out"
+    assert "story-overlap" not in candidate_ids, "URL overlap story was not filtered out"
+
+    # Assert valid story is present and fully populated
+    assert "story-valid" in candidate_ids, "Valid candidate story was incorrectly excluded"
+    valid_c = next(c for c in candidates if c["story_id"] == "story-valid")
+    assert valid_c["headline"] in ["Major Tech Breakthrough", "Scientists Confirm Finding"]
+    assert valid_c["source_count"] == 2
+    assert len(valid_c["articles"]) == 2
+    assert len(valid_c["source_urls"]) == 2
 
 
 def test_baseline_prompt_structural_freeze():

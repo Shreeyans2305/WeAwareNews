@@ -5,6 +5,10 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 5.30"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 }
 
@@ -105,12 +109,22 @@ resource "google_secret_manager_secret_iam_member" "video_db_pass_access" {
   member    = "serviceAccount:${google_service_account.video_sa.email}"
 }
 
-# New Secret: video-hmac-secret
+# New Secret: video-hmac-secret + generated random password version
+resource "random_password" "video_hmac" {
+  length  = 32
+  special = false
+}
+
 resource "google_secret_manager_secret" "video_hmac_secret" {
   secret_id = "video-hmac-secret"
   replication {
     auto {}
   }
+}
+
+resource "google_secret_manager_secret_version" "video_hmac_version" {
+  secret      = google_secret_manager_secret.video_hmac_secret.id
+  secret_data = random_password.video_hmac.result
 }
 
 resource "google_secret_manager_secret_iam_member" "video_hmac_access" {
@@ -120,12 +134,17 @@ resource "google_secret_manager_secret_iam_member" "video_hmac_access" {
   member    = "serviceAccount:${google_service_account.video_sa.email}"
 }
 
-# New Secret: video-webhook-url
+# New Secret: video-webhook-url + placeholder version
 resource "google_secret_manager_secret" "video_webhook_url" {
   secret_id = "video-webhook-url"
   replication {
     auto {}
   }
+}
+
+resource "google_secret_manager_secret_version" "video_webhook_version" {
+  secret      = google_secret_manager_secret.video_webhook_url.id
+  secret_data = "https://placeholder-webhook.example.com"
 }
 
 resource "google_secret_manager_secret_iam_member" "video_webhook_access" {
@@ -216,6 +235,13 @@ resource "google_cloud_run_v2_service" "video_api" {
   template {
     service_account = google_service_account.video_sa.email
 
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = ["${var.project_id}:${var.region}:weaware-pg"]
+      }
+    }
+
     containers {
       image = var.video_api_image
 
@@ -224,6 +250,11 @@ resource "google_cloud_run_v2_service" "video_api" {
           cpu    = "1000m"
           memory = "1024Mi"
         }
+      }
+
+      volume_mounts {
+        name       = "cloudsql"
+        mount_path = "/cloudsql"
       }
 
       env {
@@ -242,11 +273,47 @@ resource "google_cloud_run_v2_service" "video_api" {
         name  = "VIDEO_BUCKET_NAME"
         value = google_storage_bucket.video_assets.name
       }
+      env {
+        name = "API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = "api-key"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "DB_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = "db-password"
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "VIDEO_HMAC_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.video_hmac_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "VIDEO_WEBHOOK_URL"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.video_webhook_url.secret_id
+            version = "latest"
+          }
+        }
+      }
     }
 
     scaling {
       min_instance_count = 0
-      max_instance_count = 3
+      max_instance_count = 2
     }
   }
 }
@@ -262,7 +329,15 @@ resource "google_cloud_run_v2_job" "video_job" {
   template {
     template {
       service_account = google_service_account.video_sa.email
-      timeout         = "1800s" # 30 min max
+      timeout         = "2400s" # 40 min max (exceeds worst case 4 clips x 3 attempts + ffmpeg)
+      max_retries     = 0
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = ["${var.project_id}:${var.region}:weaware-pg"]
+        }
+      }
 
       containers {
         image   = var.video_job_image
@@ -273,6 +348,11 @@ resource "google_cloud_run_v2_job" "video_job" {
             cpu    = "2000m"
             memory = "2048Mi"
           }
+        }
+
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
         }
 
         env {
@@ -294,6 +374,33 @@ resource "google_cloud_run_v2_job" "video_job" {
         env {
           name  = "VEO_MODEL_TIER"
           value = "fast"
+        }
+        env {
+          name = "API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = "api-key"
+              version = "latest"
+            }
+          }
+        }
+        env {
+          name = "VIDEO_HMAC_SECRET"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.video_hmac_secret.secret_id
+              version = "latest"
+            }
+          }
+        }
+        env {
+          name = "VIDEO_WEBHOOK_URL"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.video_webhook_url.secret_id
+              version = "latest"
+            }
+          }
         }
       }
     }

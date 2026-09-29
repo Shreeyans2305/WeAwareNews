@@ -6,9 +6,11 @@ FFmpeg post-production, and review notification.
 """
 
 import argparse
+import difflib
 import json
 import logging
 import os
+import re
 import sys
 import time
 import subprocess
@@ -33,6 +35,99 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("weaware-video.runner")
+
+
+def check_clip_transcript(
+    clip_path: Path,
+    scripted_dialogue: str,
+    genai_client: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """
+    Transcribes clip audio using Gemini 2.5 Flash and diffs against the scripted line.
+    Informational check only (no auto-retry).
+    """
+    if genai_client is None:
+        try:
+            from google import genai
+            genai_client = genai.Client(
+                vertexai=True,
+                project=settings.project_id,
+                location=settings.location,
+            )
+        except Exception as e:
+            logger.warning(f"Could not initialize GenAI client for transcript check: {e}")
+            return {
+                "scripted": scripted_dialogue,
+                "transcribed": "(Client unavailable)",
+                "match_ratio": 0.0,
+                "mismatches": [f"GenAI init error: {e}"],
+                "diff": "",
+            }
+
+    try:
+        from google.genai import types
+        clip_bytes = clip_path.read_bytes()
+        prompt = (
+            "Listen carefully to the spoken voice in this video clip. "
+            "Transcribe the spoken words exactly word-for-word. "
+            "Output ONLY the transcribed words with no commentary or formatting."
+        )
+        resp = genai_client.models.generate_content(
+            model=settings.gemini_flash_model,
+            contents=[
+                types.Part.from_bytes(data=clip_bytes, mime_type="video/mp4"),
+                prompt,
+            ],
+        )
+        transcribed = resp.text.strip() if resp.text else ""
+    except Exception as e:
+        logger.warning(f"Gemini transcript check failed for {clip_path.name}: {e}")
+        return {
+            "scripted": scripted_dialogue,
+            "transcribed": "(Transcript unavailable)",
+            "match_ratio": 0.0,
+            "mismatches": [f"Audio transcription error: {str(e)}"],
+            "diff": "",
+        }
+
+    # Normalize tokens for comparison
+    def norm_tokens(text: str) -> List[str]:
+        return re.findall(r"\b[a-zA-Z0-9']+\b", text.lower())
+
+    s_tokens = norm_tokens(scripted_dialogue)
+    t_tokens = norm_tokens(transcribed)
+
+    matcher = difflib.SequenceMatcher(None, s_tokens, t_tokens)
+    ratio = matcher.ratio()
+
+    mismatches = []
+    diff_tokens = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            diff_tokens.extend(s_tokens[i1:i2])
+        elif tag == "replace":
+            s_sub = " ".join(s_tokens[i1:i2])
+            t_sub = " ".join(t_tokens[j1:j2])
+            mismatches.append(f"Expected '{s_sub}' but heard '{t_sub}'")
+            diff_tokens.append(f"[-{s_sub}-]{{+{t_sub}+}}")
+        elif tag == "delete":
+            s_del = " ".join(s_tokens[i1:i2])
+            mismatches.append(f"Omitted: '{s_del}'")
+            diff_tokens.append(f"[-{s_del}-]")
+        elif tag == "insert":
+            t_ins = " ".join(t_tokens[j1:j2])
+            mismatches.append(f"Inserted: '{t_ins}'")
+            diff_tokens.append(f"{{+{t_ins}+}}")
+
+    diff_str = " ".join(diff_tokens)
+
+    return {
+        "scripted": scripted_dialogue,
+        "transcribed": transcribed,
+        "match_ratio": round(ratio * 100, 1),
+        "mismatches": mismatches,
+        "diff": diff_str,
+    }
 
 
 def fetch_candidates_from_api(api_url: str, api_key: str, limit: int = 10) -> List[VideoCandidateResponse]:
@@ -222,6 +317,20 @@ def run_pipeline(
         )
         sys.exit(1)
 
+    # 6b. Automated post-generation transcript verification (Gemini Flash audio input)
+    transcript_checks = []
+    if not dry_run:
+        logger.info("Running automatic post-generation transcript verification with Gemini Flash audio...")
+        for clip, clip_file in zip(script.clips, clip_paths):
+            check_res = check_clip_transcript(clip_file, clip.dialogue)
+            check_res["clip_index"] = clip.clip_index
+            check_res["speaker"] = clip.speaker
+            transcript_checks.append(check_res)
+            logger.info(
+                f"Clip {clip.clip_index} Transcript Match: {check_res['match_ratio']}% "
+                f"({len(check_res['mismatches'])} mismatches)"
+            )
+
     # 7. Post-Production (FFmpeg)
     update_status_via_api(api_url, api_key, run_id, "generating_video", "post_processing")
     source_names = [a.source_name for a in current_candidate.articles]
@@ -237,6 +346,7 @@ def run_pipeline(
         "veo_model": settings.active_veo_model,
         "estimated_cost_usd": veo_client.total_cost_usd,
         "veo_seconds_used": veo_client.total_veo_seconds_spent,
+        "transcript_checks": transcript_checks,
     }
 
     artifacts = process_video_and_metadata(

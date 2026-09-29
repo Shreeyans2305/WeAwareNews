@@ -7,6 +7,7 @@ and Make.com publishing endpoints.
 import os
 import json
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
@@ -35,7 +36,13 @@ from video.api.db import get_db_connection
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("weaware-video-api")
 
-app = FastAPI(title="WeAware Late Night Video API", version="1.0.0")
+app = FastAPI(
+    title="WeAware Late Night Video API",
+    version="1.0.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 
 
 def truncate_excerpt(text: Optional[str], max_chars: int = 1200) -> str:
@@ -379,21 +386,59 @@ def get_video_review_page(
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
-                "SELECT status, headline_snapshot, caption, video_gcs_uri, thumbnail_gcs_uri FROM video_runs WHERE run_id = %s",
+                "SELECT status, headline_snapshot, caption, video_gcs_uri, thumbnail_gcs_uri, run_metadata FROM video_runs WHERE run_id = %s",
                 (run_id,),
             )
             row = cur.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="Run not found")
 
-            if row["status"] != "ready_for_review":
+            current_status = row.get("status")
+            if current_status != "ready_for_review":
                 return HTMLResponse(
-                    content=f"<html><body style='font-family:sans-serif;padding:40px;text-align:center;'><h2>Review Already Completed</h2><p>This video run is currently in status: <b>{row['status']}</b>.</p></body></html>"
+                    content=f"<html><body style='font-family:sans-serif;padding:40px;text-align:center;'><h2>Review Already Completed</h2><p>This video run is currently in status: <b>{current_status}</b>.</p></body></html>"
                 )
 
-            headline = row["headline_snapshot"]
-            caption = row["caption"] or "No caption provided."
-            video_uri = row["video_gcs_uri"] or ""
+            headline = row.get("headline_snapshot", "")
+            caption = row.get("caption") or "No caption provided."
+            video_uri = row.get("video_gcs_uri") or ""
+            metadata = row.get("run_metadata") or {}
+            transcript_checks = metadata.get("transcript_checks", [])
+
+            transcript_html = ""
+            if transcript_checks:
+                transcript_items = []
+                for tc in transcript_checks:
+                    c_idx = tc.get("clip_index", "?")
+                    spk = tc.get("speaker", "Anchor")
+                    ratio = tc.get("match_ratio", 0.0)
+                    mismatches = tc.get("mismatches", [])
+                    diff = tc.get("diff", "")
+                    
+                    status_badge = f"<span style='color:#10b981;font-weight:bold;'>{ratio}% Match</span>" if ratio >= 90 else f"<span style='color:#f59e0b;font-weight:bold;'>{ratio}% Match</span>"
+                    mismatch_desc = ""
+                    if mismatches:
+                        mismatch_desc = "<div style='color:#f87171;font-size:0.8rem;margin-top:4px;'><b>Mismatches:</b> " + "; ".join(mismatches) + "</div>"
+                    else:
+                        mismatch_desc = "<div style='color:#34d399;font-size:0.8rem;margin-top:4px;'>✓ 100% Word-for-Word Lip Match</div>"
+
+                    transcript_items.append(
+                        f"""<div style='background:#0f172a;border-radius:6px;padding:8px;margin-bottom:8px;'>
+                            <div style='display:flex;justify-content:space-between;font-size:0.85rem;'>
+                                <b>Clip {c_idx} ({spk.title()}):</b> {status_badge}
+                            </div>
+                            <div style='font-size:0.8rem;color:#94a3b8;margin-top:4px;'><b>Script:</b> "{tc.get('scripted', '')}"</div>
+                            <div style='font-size:0.8rem;color:#cbd5e1;margin-top:2px;'><b>Heard:</b> "{tc.get('transcribed', '')}"</div>
+                            {mismatch_desc}
+                        </div>"""
+                    )
+                transcript_html = f"""
+                <div style='background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px;margin-bottom:16px;'>
+                    <h4 style='margin:0 0 8px 0;color:#38bdf8;font-size:0.9rem;'>Automated Spoken Dialogue Transcript Check (Gemini Flash Audio)</h4>
+                    {"".join(transcript_items)}
+                    <div style='font-size:0.75rem;color:#64748b;'>*Informational only — check audio/video before final approval.</div>
+                </div>
+                """
 
             btn_color = "#10b981" if action == "approve" else "#ef4444"
             btn_text = "Confirm Approval" if action == "approve" else "Confirm Rejection"
@@ -406,7 +451,7 @@ def get_video_review_page(
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>
                     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; display: flex; justify-content: center; }}
-                    .card {{ background: #1e293b; border-radius: 12px; max-width: 520px; width: 100%; padding: 24px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); }}
+                    .card {{ background: #1e293b; border-radius: 12px; max-width: 560px; width: 100%; padding: 24px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); }}
                     h2 {{ margin-top: 0; color: #38bdf8; font-size: 1.25rem; }}
                     .caption {{ background: #0f172a; border-radius: 8px; padding: 12px; font-size: 0.9rem; color: #94a3b8; white-space: pre-wrap; margin-bottom: 16px; }}
                     .checklist {{ background: #0f172a; border-radius: 8px; padding: 12px; font-size: 0.85rem; color: #cbd5e1; margin-bottom: 20px; }}
@@ -423,6 +468,8 @@ def get_video_review_page(
                     <p><b>Headline:</b> {headline}</p>
                     <div class="caption"><b>Caption:</b><br>{caption}</div>
                     
+                    {transcript_html}
+
                     <div class="checklist">
                         <h4>Pre-Publication QA Checklist</h4>
                         <label><input type="checkbox" checked> Face & voice consistent across all clips</label>

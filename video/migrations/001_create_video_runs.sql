@@ -4,6 +4,8 @@
 
 BEGIN;
 
+SET LOCAL lock_timeout = '5s';
+
 CREATE TABLE IF NOT EXISTS video_runs (
     run_id UUID PRIMARY KEY,
     story_id TEXT NOT NULL,

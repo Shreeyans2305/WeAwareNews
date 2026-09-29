@@ -178,3 +178,30 @@ def test_generate_subtitles_file(tmp_path):
     assert "First line of dialogue." in content
     assert "00:00:08,000 --> 00:00:16,000" in content
     assert "Second line of dialogue." in content
+
+
+def test_check_clip_transcript_diff(tmp_path):
+    from unittest.mock import MagicMock
+    from video.pipeline.runner import check_clip_transcript
+
+    dummy_clip = tmp_path / "test_clip.mp4"
+    dummy_clip.write_bytes(b"fake video data")
+
+    # Mock GenAI client returning exact transcription
+    mock_resp = MagicMock()
+    mock_resp.text = "Good evening Welcome back to WeAware Late Night"
+    mock_client = MagicMock()
+    mock_client.models.generate_content.return_value = mock_resp
+
+    scripted = "Good evening! Welcome back to WeAware Late Night."
+    res = check_clip_transcript(dummy_clip, scripted, genai_client=mock_client)
+    assert res["match_ratio"] == 100.0
+    assert len(res["mismatches"]) == 0
+
+    # Mock GenAI client returning slight mismatch (e.g. number vs word or missed word)
+    mock_resp.text = "Good evening Welcome back to Night"
+    res_mismatch = check_clip_transcript(dummy_clip, scripted, genai_client=mock_client)
+    assert res_mismatch["match_ratio"] < 100.0
+    assert len(res_mismatch["mismatches"]) > 0
+    assert "[-weaware late-]" in res_mismatch["diff"]
+

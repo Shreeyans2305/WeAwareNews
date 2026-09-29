@@ -1,0 +1,692 @@
+
+OpenTofu used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  + create
+
+OpenTofu will perform the following actions:
+
+  # google_cloud_run_v2_job.video_job will be created
+  + resource "google_cloud_run_v2_job" "video_job" {
+      + conditions               = (known after apply)
+      + create_time              = (known after apply)
+      + creator                  = (known after apply)
+      + delete_time              = (known after apply)
+      + effective_annotations    = (known after apply)
+      + effective_labels         = (known after apply)
+      + etag                     = (known after apply)
+      + execution_count          = (known after apply)
+      + expire_time              = (known after apply)
+      + generation               = (known after apply)
+      + id                       = (known after apply)
+      + last_modifier            = (known after apply)
+      + latest_created_execution = (known after apply)
+      + launch_stage             = (known after apply)
+      + location                 = "us-central1"
+      + name                     = "weaware-video-job"
+      + observed_generation      = (known after apply)
+      + project                  = "project-9ba21d45-1dfd-4108-b69"
+      + reconciling              = (known after apply)
+      + terminal_condition       = (known after apply)
+      + terraform_labels         = (known after apply)
+      + uid                      = (known after apply)
+      + update_time              = (known after apply)
+
+      + template {
+          + parallelism = (known after apply)
+          + task_count  = (known after apply)
+
+          + template {
+              + execution_environment = (known after apply)
+              + max_retries           = 0
+              + service_account       = (known after apply)
+              + timeout               = "2400s"
+
+              + containers {
+                  + command = [
+                      + "python",
+                      + "video/pipeline/runner.py",
+                    ]
+                  + image   = "us-central1-docker.pkg.dev/project-9ba21d45-1dfd-4108-b69/weaware-repo/weaware-video-job:latest"
+
+                  + env {
+                      + name  = "GOOGLE_CLOUD_PROJECT"
+                      + value = "project-9ba21d45-1dfd-4108-b69"
+                    }
+                  + env {
+                      + name  = "GOOGLE_CLOUD_LOCATION"
+                      + value = "us-central1"
+                    }
+                  + env {
+                      + name  = "VIDEO_API_URL"
+                      + value = (known after apply)
+                    }
+                  + env {
+                      + name  = "VIDEO_BUCKET_NAME"
+                      + value = "weaware-video-assets-project-9ba21d45-1dfd-4108-b69"
+                    }
+                  + env {
+                      + name  = "VEO_MODEL_TIER"
+                      + value = "fast"
+                    }
+                  + env {
+                      + name = "API_KEY"
+
+                      + value_source {
+                          + secret_key_ref {
+                              + secret  = "api-key"
+                              + version = "latest"
+                            }
+                        }
+                    }
+                  + env {
+                      + name = "VIDEO_HMAC_SECRET"
+
+                      + value_source {
+                          + secret_key_ref {
+                              + secret  = "video-hmac-secret"
+                              + version = "latest"
+                            }
+                        }
+                    }
+                  + env {
+                      + name = "VIDEO_WEBHOOK_URL"
+
+                      + value_source {
+                          + secret_key_ref {
+                              + secret  = "video-webhook-url"
+                              + version = "latest"
+                            }
+                        }
+                    }
+
+                  + resources {
+                      + limits = {
+                          + "cpu"    = "2000m"
+                          + "memory" = "2048Mi"
+                        }
+                    }
+
+                  + volume_mounts {
+                      + mount_path = "/cloudsql"
+                      + name       = "cloudsql"
+                    }
+                }
+
+              + volumes {
+                  + name = "cloudsql"
+
+                  + cloud_sql_instance {
+                      + instances = [
+                          + "project-9ba21d45-1dfd-4108-b69:us-central1:weaware-pg",
+                        ]
+                    }
+                }
+            }
+        }
+    }
+
+  # google_cloud_run_v2_job_iam_member.workflows_job_developer will be created
+  + resource "google_cloud_run_v2_job_iam_member" "workflows_job_developer" {
+      + etag     = (known after apply)
+      + id       = (known after apply)
+      + location = "us-central1"
+      + member   = (known after apply)
+      + name     = "weaware-video-job"
+      + project  = (known after apply)
+      + role     = "roles/run.developer"
+    }
+
+  # google_cloud_run_v2_service.video_api will be created
+  + resource "google_cloud_run_v2_service" "video_api" {
+      + conditions              = (known after apply)
+      + create_time             = (known after apply)
+      + creator                 = (known after apply)
+      + delete_time             = (known after apply)
+      + effective_annotations   = (known after apply)
+      + effective_labels        = (known after apply)
+      + etag                    = (known after apply)
+      + expire_time             = (known after apply)
+      + generation              = (known after apply)
+      + id                      = (known after apply)
+      + ingress                 = "INGRESS_TRAFFIC_ALL"
+      + last_modifier           = (known after apply)
+      + latest_created_revision = (known after apply)
+      + latest_ready_revision   = (known after apply)
+      + launch_stage            = (known after apply)
+      + location                = "us-central1"
+      + name                    = "weaware-video-api"
+      + observed_generation     = (known after apply)
+      + project                 = "project-9ba21d45-1dfd-4108-b69"
+      + reconciling             = (known after apply)
+      + terminal_condition      = (known after apply)
+      + terraform_labels        = (known after apply)
+      + traffic_statuses        = (known after apply)
+      + uid                     = (known after apply)
+      + update_time             = (known after apply)
+      + uri                     = (known after apply)
+
+      + template {
+          + max_instance_request_concurrency = (known after apply)
+          + service_account                  = (known after apply)
+          + timeout                          = (known after apply)
+
+          + containers {
+              + image = "us-central1-docker.pkg.dev/project-9ba21d45-1dfd-4108-b69/weaware-repo/weaware-video-api:latest"
+
+              + env {
+                  + name  = "GOOGLE_CLOUD_PROJECT"
+                  + value = "project-9ba21d45-1dfd-4108-b69"
+                }
+              + env {
+                  + name  = "GOOGLE_CLOUD_LOCATION"
+                  + value = "us-central1"
+                }
+              + env {
+                  + name  = "INSTANCE_CONNECTION_NAME"
+                  + value = "project-9ba21d45-1dfd-4108-b69:us-central1:weaware-pg"
+                }
+              + env {
+                  + name  = "VIDEO_BUCKET_NAME"
+                  + value = "weaware-video-assets-project-9ba21d45-1dfd-4108-b69"
+                }
+              + env {
+                  + name = "API_KEY"
+
+                  + value_source {
+                      + secret_key_ref {
+                          + secret  = "api-key"
+                          + version = "latest"
+                        }
+                    }
+                }
+              + env {
+                  + name = "DB_PASSWORD"
+
+                  + value_source {
+                      + secret_key_ref {
+                          + secret  = "db-password"
+                          + version = "latest"
+                        }
+                    }
+                }
+              + env {
+                  + name = "VIDEO_HMAC_SECRET"
+
+                  + value_source {
+                      + secret_key_ref {
+                          + secret  = "video-hmac-secret"
+                          + version = "latest"
+                        }
+                    }
+                }
+              + env {
+                  + name = "VIDEO_WEBHOOK_URL"
+
+                  + value_source {
+                      + secret_key_ref {
+                          + secret  = "video-webhook-url"
+                          + version = "latest"
+                        }
+                    }
+                }
+
+              + liveness_probe (known after apply)
+
+              + ports (known after apply)
+
+              + resources {
+                  + limits = {
+                      + "cpu"    = "1000m"
+                      + "memory" = "1024Mi"
+                    }
+                }
+
+              + startup_probe (known after apply)
+
+              + volume_mounts {
+                  + mount_path = "/cloudsql"
+                  + name       = "cloudsql"
+                }
+            }
+
+          + scaling {
+              + max_instance_count = 2
+              + min_instance_count = 0
+            }
+
+          + volumes {
+              + name = "cloudsql"
+
+              + cloud_sql_instance {
+                  + instances = [
+                      + "project-9ba21d45-1dfd-4108-b69:us-central1:weaware-pg",
+                    ]
+                }
+            }
+        }
+
+      + traffic (known after apply)
+    }
+
+  # google_cloud_run_v2_service_iam_member.video_api_public_access will be created
+  + resource "google_cloud_run_v2_service_iam_member" "video_api_public_access" {
+      + etag     = (known after apply)
+      + id       = (known after apply)
+      + location = "us-central1"
+      + member   = "allUsers"
+      + name     = "weaware-video-api"
+      + project  = (known after apply)
+      + role     = "roles/run.invoker"
+    }
+
+  # google_cloud_scheduler_job.video_scheduler will be created
+  + resource "google_cloud_scheduler_job" "video_scheduler" {
+      + description = "Triggers WeAware Late Night video pipeline at 02:00 UTC on ingestion days"
+      + id          = (known after apply)
+      + name        = "weaware-video-scheduler"
+      + paused      = true
+      + project     = "project-9ba21d45-1dfd-4108-b69"
+      + region      = "us-central1"
+      + schedule    = "0 2 */2 * *"
+      + state       = (known after apply)
+      + time_zone   = "Etc/UTC"
+
+      + http_target {
+          + body        = "eyJhcmd1bWVudCI6IntcInRpZXJcIjpcImZhc3RcIn0ifQ=="
+          + http_method = "POST"
+          + uri         = "https://workflowexecutions.googleapis.com/v1/projects/project-9ba21d45-1dfd-4108-b69/locations/us-central1/workflows/weaware-video-pipeline/executions"
+
+          + oauth_token {
+              + service_account_email = (known after apply)
+            }
+        }
+    }
+
+  # google_project_iam_member.scheduler_workflows_invoker will be created
+  + resource "google_project_iam_member" "scheduler_workflows_invoker" {
+      + etag    = (known after apply)
+      + id      = (known after apply)
+      + member  = (known after apply)
+      + project = "project-9ba21d45-1dfd-4108-b69"
+      + role    = "roles/workflows.invoker"
+    }
+
+  # google_project_iam_member.video_aiplatform will be created
+  + resource "google_project_iam_member" "video_aiplatform" {
+      + etag    = (known after apply)
+      + id      = (known after apply)
+      + member  = (known after apply)
+      + project = "project-9ba21d45-1dfd-4108-b69"
+      + role    = "roles/aiplatform.user"
+    }
+
+  # google_project_iam_member.video_cloudsql_client will be created
+  + resource "google_project_iam_member" "video_cloudsql_client" {
+      + etag    = (known after apply)
+      + id      = (known after apply)
+      + member  = (known after apply)
+      + project = "project-9ba21d45-1dfd-4108-b69"
+      + role    = "roles/cloudsql.client"
+    }
+
+  # google_project_iam_member.workflows_build_viewer will be created
+  + resource "google_project_iam_member" "workflows_build_viewer" {
+      + etag    = (known after apply)
+      + id      = (known after apply)
+      + member  = (known after apply)
+      + project = "project-9ba21d45-1dfd-4108-b69"
+      + role    = "roles/cloudbuild.builds.viewer"
+    }
+
+  # google_pubsub_topic.video_reviews will be created
+  + resource "google_pubsub_topic" "video_reviews" {
+      + effective_labels = (known after apply)
+      + id               = (known after apply)
+      + name             = "weaware-video-reviews"
+      + project          = "project-9ba21d45-1dfd-4108-b69"
+      + terraform_labels = (known after apply)
+
+      + message_storage_policy (known after apply)
+
+      + schema_settings (known after apply)
+    }
+
+  # google_pubsub_topic_iam_member.video_pubsub_publisher will be created
+  + resource "google_pubsub_topic_iam_member" "video_pubsub_publisher" {
+      + etag    = (known after apply)
+      + id      = (known after apply)
+      + member  = (known after apply)
+      + project = (known after apply)
+      + role    = "roles/pubsub.publisher"
+      + topic   = "weaware-video-reviews"
+    }
+
+  # google_secret_manager_secret.video_hmac_secret will be created
+  + resource "google_secret_manager_secret" "video_hmac_secret" {
+      + create_time           = (known after apply)
+      + effective_annotations = (known after apply)
+      + effective_labels      = (known after apply)
+      + expire_time           = (known after apply)
+      + id                    = (known after apply)
+      + name                  = (known after apply)
+      + project               = "project-9ba21d45-1dfd-4108-b69"
+      + secret_id             = "video-hmac-secret"
+      + terraform_labels      = (known after apply)
+
+      + replication {
+          + auto {
+            }
+        }
+    }
+
+  # google_secret_manager_secret.video_webhook_url will be created
+  + resource "google_secret_manager_secret" "video_webhook_url" {
+      + create_time           = (known after apply)
+      + effective_annotations = (known after apply)
+      + effective_labels      = (known after apply)
+      + expire_time           = (known after apply)
+      + id                    = (known after apply)
+      + name                  = (known after apply)
+      + project               = "project-9ba21d45-1dfd-4108-b69"
+      + secret_id             = "video-webhook-url"
+      + terraform_labels      = (known after apply)
+
+      + replication {
+          + auto {
+            }
+        }
+    }
+
+  # google_secret_manager_secret_iam_member.video_api_key_access will be created
+  + resource "google_secret_manager_secret_iam_member" "video_api_key_access" {
+      + etag      = (known after apply)
+      + id        = (known after apply)
+      + member    = (known after apply)
+      + project   = "project-9ba21d45-1dfd-4108-b69"
+      + role      = "roles/secretmanager.secretAccessor"
+      + secret_id = "api-key"
+    }
+
+  # google_secret_manager_secret_iam_member.video_db_pass_access will be created
+  + resource "google_secret_manager_secret_iam_member" "video_db_pass_access" {
+      + etag      = (known after apply)
+      + id        = (known after apply)
+      + member    = (known after apply)
+      + project   = "project-9ba21d45-1dfd-4108-b69"
+      + role      = "roles/secretmanager.secretAccessor"
+      + secret_id = "db-password"
+    }
+
+  # google_secret_manager_secret_iam_member.video_hmac_access will be created
+  + resource "google_secret_manager_secret_iam_member" "video_hmac_access" {
+      + etag      = (known after apply)
+      + id        = (known after apply)
+      + member    = (known after apply)
+      + project   = "project-9ba21d45-1dfd-4108-b69"
+      + role      = "roles/secretmanager.secretAccessor"
+      + secret_id = "video-hmac-secret"
+    }
+
+  # google_secret_manager_secret_iam_member.video_webhook_access will be created
+  + resource "google_secret_manager_secret_iam_member" "video_webhook_access" {
+      + etag      = (known after apply)
+      + id        = (known after apply)
+      + member    = (known after apply)
+      + project   = "project-9ba21d45-1dfd-4108-b69"
+      + role      = "roles/secretmanager.secretAccessor"
+      + secret_id = "video-webhook-url"
+    }
+
+  # google_secret_manager_secret_iam_member.workflows_api_key_access will be created
+  + resource "google_secret_manager_secret_iam_member" "workflows_api_key_access" {
+      + etag      = (known after apply)
+      + id        = (known after apply)
+      + member    = (known after apply)
+      + project   = "project-9ba21d45-1dfd-4108-b69"
+      + role      = "roles/secretmanager.secretAccessor"
+      + secret_id = "api-key"
+    }
+
+  # google_secret_manager_secret_version.video_hmac_version will be created
+  + resource "google_secret_manager_secret_version" "video_hmac_version" {
+      + create_time           = (known after apply)
+      + deletion_policy       = "DELETE"
+      + destroy_time          = (known after apply)
+      + enabled               = true
+      + id                    = (known after apply)
+      + is_secret_data_base64 = false
+      + name                  = (known after apply)
+      + secret                = (known after apply)
+      + secret_data           = (sensitive value)
+      + version               = (known after apply)
+    }
+
+  # google_secret_manager_secret_version.video_webhook_version will be created
+  + resource "google_secret_manager_secret_version" "video_webhook_version" {
+      + create_time           = (known after apply)
+      + deletion_policy       = "DELETE"
+      + destroy_time          = (known after apply)
+      + enabled               = true
+      + id                    = (known after apply)
+      + is_secret_data_base64 = false
+      + name                  = (known after apply)
+      + secret                = (known after apply)
+      + secret_data           = (sensitive value)
+      + version               = (known after apply)
+    }
+
+  # google_service_account.scheduler_sa will be created
+  + resource "google_service_account" "scheduler_sa" {
+      + account_id   = "weaware-scheduler-sa"
+      + disabled     = false
+      + display_name = "WeAware Video Scheduler Service Account"
+      + email        = (known after apply)
+      + id           = (known after apply)
+      + member       = (known after apply)
+      + name         = (known after apply)
+      + project      = "project-9ba21d45-1dfd-4108-b69"
+      + unique_id    = (known after apply)
+    }
+
+  # google_service_account.video_sa will be created
+  + resource "google_service_account" "video_sa" {
+      + account_id   = "weaware-video-sa"
+      + disabled     = false
+      + display_name = "WeAware Video Pipeline & API Service Account"
+      + email        = (known after apply)
+      + id           = (known after apply)
+      + member       = (known after apply)
+      + name         = (known after apply)
+      + project      = "project-9ba21d45-1dfd-4108-b69"
+      + unique_id    = (known after apply)
+    }
+
+  # google_service_account.workflows_sa will be created
+  + resource "google_service_account" "workflows_sa" {
+      + account_id   = "weaware-workflows-sa"
+      + disabled     = false
+      + display_name = "WeAware Video Workflows Orchestration Service Account"
+      + email        = (known after apply)
+      + id           = (known after apply)
+      + member       = (known after apply)
+      + name         = (known after apply)
+      + project      = "project-9ba21d45-1dfd-4108-b69"
+      + unique_id    = (known after apply)
+    }
+
+  # google_service_account_iam_member.video_token_creator will be created
+  + resource "google_service_account_iam_member" "video_token_creator" {
+      + etag               = (known after apply)
+      + id                 = (known after apply)
+      + member             = (known after apply)
+      + role               = "roles/iam.serviceAccountTokenCreator"
+      + service_account_id = (known after apply)
+    }
+
+  # google_service_account_iam_member.workflows_sa_user will be created
+  + resource "google_service_account_iam_member" "workflows_sa_user" {
+      + etag               = (known after apply)
+      + id                 = (known after apply)
+      + member             = (known after apply)
+      + role               = "roles/iam.serviceAccountUser"
+      + service_account_id = (known after apply)
+    }
+
+  # google_storage_bucket.video_assets will be created
+  + resource "google_storage_bucket" "video_assets" {
+      + effective_labels            = (known after apply)
+      + force_destroy               = false
+      + id                          = (known after apply)
+      + location                    = "US-CENTRAL1"
+      + name                        = "weaware-video-assets-project-9ba21d45-1dfd-4108-b69"
+      + project                     = (known after apply)
+      + project_number              = (known after apply)
+      + public_access_prevention    = (known after apply)
+      + rpo                         = (known after apply)
+      + self_link                   = (known after apply)
+      + storage_class               = "STANDARD"
+      + terraform_labels            = (known after apply)
+      + uniform_bucket_level_access = true
+      + url                         = (known after apply)
+
+      + lifecycle_rule {
+          + action {
+              + type = "Delete"
+            }
+          + condition {
+              + age                   = 14
+              + matches_prefix        = [
+                  + "runs/",
+                ]
+              + matches_storage_class = []
+              + matches_suffix        = []
+              + send_age_if_zero      = true
+              + with_state            = (known after apply)
+            }
+        }
+
+      + soft_delete_policy (known after apply)
+
+      + versioning (known after apply)
+
+      + website (known after apply)
+    }
+
+  # google_storage_bucket_iam_member.video_bucket_admin will be created
+  + resource "google_storage_bucket_iam_member" "video_bucket_admin" {
+      + bucket = "weaware-video-assets-project-9ba21d45-1dfd-4108-b69"
+      + etag   = (known after apply)
+      + id     = (known after apply)
+      + member = (known after apply)
+      + role   = "roles/storage.objectAdmin"
+    }
+
+  # google_workflows_workflow.video_pipeline will be created
+  + resource "google_workflows_workflow" "video_pipeline" {
+      + create_time      = (known after apply)
+      + description      = "Orchestrates guard checks, video generation job, and review notifications"
+      + effective_labels = (known after apply)
+      + id               = (known after apply)
+      + name             = "weaware-video-pipeline"
+      + name_prefix      = (known after apply)
+      + project          = "project-9ba21d45-1dfd-4108-b69"
+      + region           = "us-central1"
+      + revision_id      = (known after apply)
+      + service_account  = (known after apply)
+      + source_contents  = <<-EOT
+            main:
+              params: [args]
+              steps:
+                - init:
+                    assign:
+                      - project_id: ${sys.get_env("GOOGLE_CLOUD_PROJECT_ID")}
+                      - trigger_id: "c1ae5465-26cf-4c82-8370-5fd7e97ffa62"
+                      - story_id: ${default(map.get(args, "story_id"), "")}
+                      - dry_run: ${default(map.get(args, "dry_run"), false)}
+                      - tier: ${default(map.get(args, "tier"), "fast")}
+            
+                - check_cloud_build:
+                    call: http.get
+                    args:
+                      url: ${"https://cloudbuild.googleapis.com/v1/projects/" + project_id + "/locations/global/builds"}
+                      query:
+                        filter: ${"trigger_id=\"" + trigger_id + "\" AND (status=\"WORKING\" OR status=\"QUEUED\")"}
+                      auth:
+                        type: OAuth2
+                    result: build_resp
+            
+                - evaluate_build_guard:
+                    switch:
+                      - condition: ${len(default(build_resp.body.builds, [])) > 0}
+                        steps:
+                          - skip_ingestion_in_progress:
+                              return:
+                                status: "skipped"
+                                reason: "Ingestion Cloud Build is currently active/working"
+            
+                - check_data_freshness:
+                    call: http.get
+                    args:
+                      url: "https://weaware-api-177249269183.us-central1.run.app/debug/stats"
+                      headers:
+                        x-api-key: ${sys.get_env("API_KEY")}
+                    result: stats_resp
+            
+                - evaluate_freshness_guard:
+                    assign:
+                      - newest_fetched: ${stats_resp.body.newest_item_fetched_at}
+                    # Ingestion runs every 48h; guard threshold allows up to 60h
+            
+                - run_video_job:
+                    call: googleapis.run.v1.namespaces.jobs.run
+                    args:
+                      name: ${"namespaces/" + project_id + "/jobs/weaware-video-job"}
+                      location: "us-central1"
+                      body:
+                        overrides:
+                          containerOverrides:
+                            - args:
+                                - "--tier"
+                                - ${tier}
+                    result: job_exec
+            
+                - finish:
+                    return:
+                      status: "success"
+                      execution: ${job_exec}
+        EOT
+      + state            = (known after apply)
+      + terraform_labels = (known after apply)
+      + update_time      = (known after apply)
+    }
+
+  # random_password.video_hmac will be created
+  + resource "random_password" "video_hmac" {
+      + bcrypt_hash = (sensitive value)
+      + id          = (known after apply)
+      + length      = 32
+      + lower       = true
+      + min_lower   = 0
+      + min_numeric = 0
+      + min_special = 0
+      + min_upper   = 0
+      + number      = true
+      + numeric     = true
+      + result      = (sensitive value)
+      + special     = false
+      + upper       = true
+    }
+
+Plan: 29 to add, 0 to change, 0 to destroy.
+
+Changes to Outputs:
+  + scheduler_job_name        = "weaware-video-scheduler"
+  + video_api_url             = (known after apply)
+  + video_bucket              = "weaware-video-assets-project-9ba21d45-1dfd-4108-b69"
+  + video_service_account     = (known after apply)
+  + workflows_service_account = (known after apply)
+
+─────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so OpenTofu can't
+guarantee to take exactly these actions if you run "tofu apply" now.
