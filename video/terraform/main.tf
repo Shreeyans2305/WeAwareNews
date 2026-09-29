@@ -17,6 +17,11 @@ provider "google" {
   region  = var.region
 }
 
+locals {
+  video_api_image = var.video_api_image != "" ? var.video_api_image : "us-central1-docker.pkg.dev/${var.project_id}/weaware-repo/weaware-video-api:${var.image_tag}"
+  video_job_image = var.video_job_image != "" ? var.video_job_image : "us-central1-docker.pkg.dev/${var.project_id}/weaware-repo/weaware-video-job:${var.image_tag}"
+}
+
 # ---------------------------------------------------------------------------
 # 1. GCS Storage: Video Assets & Clip Runs
 # ---------------------------------------------------------------------------
@@ -145,6 +150,10 @@ resource "google_secret_manager_secret" "video_webhook_url" {
 resource "google_secret_manager_secret_version" "video_webhook_version" {
   secret      = google_secret_manager_secret.video_webhook_url.id
   secret_data = "https://placeholder-webhook.example.com"
+
+  lifecycle {
+    ignore_changes = [secret_data]
+  }
 }
 
 resource "google_secret_manager_secret_iam_member" "video_webhook_access" {
@@ -243,7 +252,7 @@ resource "google_cloud_run_v2_service" "video_api" {
     }
 
     containers {
-      image = var.video_api_image
+      image = local.video_api_image
 
       resources {
         limits = {
@@ -340,7 +349,7 @@ resource "google_cloud_run_v2_job" "video_job" {
       }
 
       containers {
-        image   = var.video_job_image
+        image   = local.video_job_image
         command = ["python", "video/pipeline/runner.py"]
 
         resources {
@@ -443,5 +452,36 @@ resource "google_cloud_scheduler_job" "video_scheduler" {
         tier = "fast"
       })
     }))
+  }
+}
+
+# ---------------------------------------------------------------------------
+# 9. Logging & Alerting: Log-based metric & alert for model runtime fallback
+# ---------------------------------------------------------------------------
+
+resource "google_logging_metric" "model_runtime_fallback" {
+  name   = "weaware_video_model_runtime_fallback"
+  filter = "resource.type=\"cloud_run_job\" AND textPayload=~\"RUNTIME_FALLBACK: Switched to candidate model\""
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+  }
+}
+
+resource "google_monitoring_alert_policy" "model_runtime_fallback_alert" {
+  display_name = "WeAware Video Pipeline - Gemini Model Runtime Fallback Triggered"
+  combiner     = "OR"
+  conditions {
+    display_name = "Gemini model runtime fallback detected in logs"
+    condition_threshold {
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.model_runtime_fallback.name}\" AND resource.type=\"cloud_run_job\""
+      duration        = "60s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      aggregations {
+        alignment_period   = "60s"
+        per_series_aligner = "ALIGN_RATE"
+      }
+    }
   }
 }

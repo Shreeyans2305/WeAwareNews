@@ -95,7 +95,9 @@ def generate_script(
     candidate: VideoCandidateResponse,
     client: Optional[genai.Client] = None,
     anchors_config: Optional[Dict[str, Any]] = None,
+    model: Optional[str] = None,
 ) -> ScriptOutput:
+    target_model = model or settings.gemini_pro_model
     if client is None:
         client = genai.Client(
             vertexai=True,
@@ -117,8 +119,9 @@ def generate_script(
 
     # Up to 2 attempts for strict word budget adherence
     for attempt in range(2):
+        logger.info(f"Generating satire script with {target_model} (attempt {attempt + 1})...")
         resp = client.models.generate_content(
-            model=settings.gemini_flash_model,
+            model=target_model,
             contents=user_prompt,
             config=types.GenerateContentConfig(
                 system_instruction=_SCRIPTER_SYSTEM_PROMPT,

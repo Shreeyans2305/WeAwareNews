@@ -102,6 +102,7 @@ class VeoClient:
                     duration_seconds=duration_seconds,
                     person_generation="allow_adult",
                     generate_audio=True,
+                    resolution=settings.veo_resolution,
                 )
 
                 logger.info(f"Submitting to {settings.active_veo_model}: {current_prompt[:80]}...")

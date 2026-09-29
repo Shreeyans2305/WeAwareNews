@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "event": "ready_for_review",
+  "run_id": "c1f7b889-b1d6-44a8-9d6e-9876543210ab",
+  "story_id": "asteroid-mining-rush-2026",
+  "headline": "Astronomers Discover Asteroid Containing Trillions in Rare Minerals",
+  "caption": "When the space mining rush begins, will celestial lawyers take a 30% cut? ☄️🚀 #SpaceMining #LateNight #Satire",
+  "hashtags": [
+    "#SpaceMining",
+    "#LateNight",
+    "#Satire",
+    "#WeAware"
+  ],
+  "sources": [
+    "Reuters",
+    "Associated Press",
+    "BBC News"
+  ],
+  "review_url": "https://weaware-video-api-xyz.run.app/videos/review?token=sample-hmac-review-token",
+  "video_preview_url": "https://storage.googleapis.com/weaware-video-assets-xyz/episodes/c1f7b889-b1d6-44a8-9d6e-9876543210ab/final_episode.mp4",
+  "thumbnail_url": "https://storage.googleapis.com/weaware-video-assets-xyz/episodes/c1f7b889-b1d6-44a8-9d6e-9876543210ab/thumbnail.jpg",
+  "estimated_cost_usd": 3.245,
+  "veo_model": "veo-3.1-fast-generate-001",
+  "veo_resolution": "720p",
+  "gemini_models_used": {
+    "scripter": "gemini-2.5-pro",
+    "picker": "gemini-2.5-flash",
+    "editor": "gemini-2.5-flash",
+    "transcriber": "gemini-2.5-flash"
+  },
+  "transcript_min_match_ratio": 0.985,
+  "transcript_mismatch_count": 0,
+  "error_message": null,
+  "created_at": "2026-09-29T12:00:00.000000Z"
+}

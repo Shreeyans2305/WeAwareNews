@@ -26,14 +26,20 @@ class Settings(BaseModel):
     gemini_pro_model: str = "gemini-2.5-pro"
     image_bootstrap_model: str = "gemini-2.5-flash-image"
 
-    # Pricing rates (USD) for cost tracking
-    rate_veo_fast_per_sec: float = 0.15
-    rate_veo_standard_per_sec: float = 0.40
+    # Pricing rates (USD) from Vertex AI official pricing
+    rate_veo_fast_720p_per_sec: float = 0.10   # 720p native (baseline default)
+    rate_veo_fast_1080p_per_sec: float = 0.12  # 1080p native
+    rate_veo_fast_per_sec: float = 0.10        # Default matches smoke test baseline (720x1280)
+    rate_veo_standard_per_sec: float = 0.40    # Standard tier (720p or 1080p)
     rate_gemini_input_per_m: float = 0.10
     rate_gemini_output_per_m: float = 0.40
 
+    # Veo Resolution & Video Output
+    veo_resolution: str = "720p"  # Locked baseline: 720p (720x1280)
+    final_output_1080p: bool = True  # Upscale native 720p to 1080p using FFmpeg Lanczos
+
     # Guardrails & Cost Limits
-    max_cost_usd_per_run: float = float(os.getenv("MAX_COST_USD_PER_RUN", "25.00"))
+    max_cost_usd_per_run: float = float(os.getenv("MAX_COST_USD_PER_RUN", "15.00"))
     max_runs_per_day: int = int(os.getenv("MAX_RUNS_PER_DAY", "4"))
     max_veo_seconds_per_day: int = int(os.getenv("MAX_VEO_SECONDS_PER_DAY", "250"))
     video_dedupe_days: int = int(os.getenv("VIDEO_DEDUPE_DAYS", "14"))
@@ -48,9 +54,10 @@ class Settings(BaseModel):
     video_api_url: str = os.getenv("VIDEO_API_URL", "http://localhost:8080")
     api_key: str = os.getenv("API_KEY", "")
 
-    # Review Notifications
+    # Review Notifications (Make.com Custom Webhook & Pub/Sub)
     pubsub_topic_name: str = os.getenv("REVIEW_PUBSUB_TOPIC", "weaware-video-reviews")
-    webhook_secret_name: str = "video-notification-webhook"
+    webhook_secret_name: str = "video-webhook-url"
+    hmac_secret_name: str = "video-hmac-secret"
 
     # Brand voice & metadata
     brand_name: str = "WeAware Late Night"

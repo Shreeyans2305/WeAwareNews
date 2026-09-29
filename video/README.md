@@ -73,15 +73,20 @@ gcloud services enable \
 
 ## 3. Vertex AI Model Selection & Quotas
 
-### Verified Active Model IDs in `us-central1`
+### Verified Active Model IDs & Retirement Dates
 
-| Role | Active Model ID | Pricing / Unit |
-| :--- | :--- | :--- |
-| **Video Generation (Fast Tier)** | `veo-3.1-fast-generate-001` | ~$0.15 / second |
-| **Video Generation (Standard Tier)** | `veo-3.1-generate-001` | ~$0.40 / second |
-| **Story Picker & Scriptwriting** | `gemini-2.5-flash` | $0.10 / 1M in, $0.40 / 1M out |
-| **Standards & Fact Editor** | `gemini-2.5-pro` | $1.25 / 1M in, $5.00 / 1M out |
-| **Anchor/Set Asset Generator** | `gemini-2.5-flash-image` | Pay-per-image |
+| Role | Active Model ID | Location | Lifecycle Status | Pricing / 1M Tokens (or s) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Video Generation (Fast 720p Tier)** | `veo-3.1-fast-generate-001` | `us-central1` | GA (Active) | $0.10 / second (with audio) |
+| **Video Generation (Standard 720p Tier)** | `veo-3.1-generate-001` | `us-central1` | GA (Active) | $0.20 / second (with audio) |
+| **Story Picker (Candidate 1)** | `gemini-2.5-flash` | `us-central1` | GA (Discontinues 2026-10-20) | $0.10 in, $0.40 out |
+| **Story Picker (Candidate 2 - Future)** | `gemini-3.5-flash` | `global` | GA (Active) | $0.10 in, $0.40 out |
+| **Story Picker (Candidate 3 - Future)** | `gemini-3.8-flash` | `global` | GA (Active) | $0.10 in, $0.40 out |
+| **Standards & Fact Editor (Candidate 1)** | `gemini-2.5-pro` | `us-central1` | GA (Discontinues 2026-10-20) | $1.25 in, $5.00 out |
+| **Standards & Fact Editor (Candidate 2 - Future)** | `gemini-3.1-pro-preview` | `global` | Preview (Active) | $1.25 in, $5.00 out |
+| **Anchor/Set Asset Generator** | `gemini-2.5-flash-image` | `us-central1` | GA (Discontinues 2027-03-15) | Pay-per-image |
+
+*Note: Plate regeneration after 2027-03-15 will use `gemini-3.1-flash-image`.*
 
 ### Quotas to Request in Google Cloud Console
 Under **IAM & Admin -> Quotas & System Limits** for `us-central1`:
@@ -90,23 +95,24 @@ Under **IAM & Admin -> Quotas & System Limits** for `us-central1`:
 
 ---
 
-## 4. Cost Caps & Worst-Case Spend
+## 4. Cost Caps & Spend Limits
 
 ### Tunables in `video/config/settings.py`
 - `VEO_MODEL_TIER`: `fast` (default) or `standard`
-- `MAX_COST_USD_PER_RUN`: `$25.00`
+- `VEO_RESOLUTION`: `720p` (frozen production baseline)
+- `MAX_COST_USD_PER_RUN`: `$15.00`
 - `MAX_RUNS_PER_DAY`: `4`
 - `MAX_VEO_SECONDS_PER_DAY`: `250`
 
-### Cost Breakdown per 32-Second Episode (4 clips × 8s)
+### Cost Breakdown per 32-Second Episode (4 clips × 8s @ 720p)
 
-| Scenario | Fast Tier (`veo-3.1-fast`) | Standard Tier (`veo-3.1`) |
+| Scenario | Fast Tier (`veo-3.1-fast-generate-001` @ $0.10/s) | Standard Tier (`veo-3.1-generate-001` @ $0.20/s) |
 | :--- | :--- | :--- |
-| **Base Run (32 seconds, 0 retries)** | **$4.80** | **$12.80** |
-| **1 Safety Retry (40 seconds total)** | **$6.00** | **$16.00** |
-| **Worst-Case (4 clips × 3 attempts = 96s)** | **$14.40** | **$38.40** *(capped at $25.00)* |
+| **Base Run (32 seconds, 0 retries)** | **$3.20** | **$6.40** |
+| **1 Safety Retry (40 seconds total)** | **$4.00** | **$8.00** |
+| **Worst-Case (4 clips × 3 attempts = 96s)** | **$9.60** | **$19.20** *(capped at $15.00)* |
 
-*Note: The pipeline checks remaining budget before every clip and aborts if `MAX_COST_USD_PER_RUN` would be exceeded.*
+*Note: The pipeline checks remaining budget before every clip and aborts (`cost_cap_aborted`) if `MAX_COST_USD_PER_RUN` ($15.00) would be exceeded.*
 
 ---
 
@@ -138,7 +144,7 @@ python video/bootstrap_assets.py --confirm
 
 ---
 
-## 7. Exact Deployment Order (Awaiting Approval)
+## 7. Exact Deployment Order
 
 Follow this sequence strictly when deploying:
 
@@ -147,36 +153,75 @@ Follow this sequence strictly when deploying:
    gcloud sql backups create --instance=weaware-pg --project=project-9ba21d45-1dfd-4108-b69 --description="Pre-video-runs migration"
    ```
 2. **Database Migration**:
-   Connect via Cloud SQL Proxy and run `video/migrations/001_create_video_runs.sql`.
+   Run via Cloud SQL Proxy: `video/migrations/001_create_video_runs.sql`.
 3. **Build & Push Containers**:
    ```bash
-   # Build video container with FFmpeg
-   gcloud builds submit --tag us-central1-docker.pkg.dev/project-9ba21d45-1dfd-4108-b69/weaware-repo/weaware-video-api:latest -f video/Dockerfile .
-   gcloud builds submit --tag us-central1-docker.pkg.dev/project-9ba21d45-1dfd-4108-b69/weaware-repo/weaware-video-job:latest -f video/Dockerfile .
+   gcloud builds submit --config=video/cloudbuild.yaml .
    ```
 4. **Terraform Apply**:
    ```bash
    cd video/terraform
-   terraform apply
+   terraform apply -var="image_tag=<BUILD_ID>"
    ```
-   *Creates GCS bucket, SAs, IAM, Pub/Sub, Cloud Run service & job, Workflows, and paused Scheduler job.*
-5. **Run Master Asset Bootstrap**:
+   *Creates GCS bucket, SAs, IAM, Pub/Sub, Cloud Run service & job, Workflows, secret versions, and paused Scheduler job.*
+5. **Populate Real Make.com Webhook Secret**:
+   Terraform initializes `video-webhook-url` with a placeholder. Update it with your live Make webhook URL:
+   ```bash
+   echo -n "<make webhook url>" | gcloud secrets versions add video-webhook-url --data-file=-
+   ```
+   *(Terraform includes `lifecycle { ignore_changes = [secret_data] }` to guarantee your live URL is never overwritten on subsequent terraform apply runs).*
+6. **Send Test Webhook to Verify Make Scenario**:
+   ```bash
+   PYTHONPATH=. python -m video.pipeline.notifier --send-test
+   ```
+7. **Run Master Asset Bootstrap**:
    ```bash
    python video/bootstrap_assets.py --confirm
    ```
-6. **Enable Scheduler Job** (unpause in Cloud Console or via gcloud).
+8. **Enable Scheduler Job** (unpause in Cloud Console or via gcloud).
 
 ### Rollback Steps
 - **Cloud Run Service / Job**: `gcloud run services delete weaware-video-api --region=us-central1`, `gcloud run jobs delete weaware-video-job --region=us-central1`.
 - **Cloud SQL**: The migration is purely additive. If rollback is desired:
-  `DROP TABLE IF EXISTS video_runs CASCADE;`
+  `DROP TABLE video_runs CASCADE;`
 - **Terraform**: `cd video/terraform && terraform destroy`.
 
 ---
 
-## 8. Make.com Scenario Specification (Instagram Reels)
+## 8. Make.com Scenarios Specification
 
-Match the existing Make.com pull pattern used for news stories:
+Two independent Make.com scenarios handle the pipeline:
+
+### Scenario A: Editor Review Notification (Push via Webhook)
+A dedicated review scenario triggered as soon as a video episode is assembled:
+
+```
+[Module 1: Webhooks > Custom Webhook]
+  - Path: Listens for POST from pipeline notifier
+  - Security: Validates optional `x-weaware-signature` HMAC header
+          |
+          v
+[Module 2: Flow Control > Router]
+  - Branch 1: `event` = "ready_for_review"
+  - Branch 2: `event` = "run_failed" OR "cost_cap_aborted"
+  - Branch 3: `event` = "test" (for structure determination / testing)
+          |
+          +---> [Branch 1: Send Notification]
+          |       - Notification Module (Email, Slack, Discord, or Telegram)
+          |       - Content: Headline, Caption, Sources, Cost ($usd)
+          |       - Media: Includes {{video_preview_url}} and {{thumbnail_url}}
+          |       - Action Link: {{review_url}} (Single-use, 24h HMAC-secured review page)
+          |
+          +---> [Branch 2: Send Alert]
+                  - Alert Module: Error message & run_id
+```
+
+> **Security Note on Review Link**: The review link contains a time-limited (24-hour expiration) HMAC-SHA256 signature and is single-use: once approved or rejected, the token is consumed in the database. Even if logged in Make.com execution history, the token cannot be reused after actioning.
+
+---
+
+### Scenario B: Instagram Reels Publication (Pull Poller)
+Matches the existing scheduled WeAware news story publishing flow:
 
 ```
 [Schedule: Every 2 Hours]

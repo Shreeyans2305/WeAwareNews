@@ -19,6 +19,15 @@ from backend.ingestion.store.postgres_store import _SCHEMA as PROD_PG_SCHEMA
 TEST_DB_URL = os.getenv("TEST_DATABASE_URL", "postgresql://postgres:testpass@127.0.0.1:5434/weaware_test")
 
 
+def _is_pg_reachable() -> bool:
+    try:
+        conn = psycopg2.connect(TEST_DB_URL, connect_timeout=1)
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
 @pytest.fixture
 def clean_pg_and_sqlite(tmp_path, monkeypatch):
     """
@@ -93,6 +102,10 @@ def clean_pg_and_sqlite(tmp_path, monkeypatch):
     return str(sqlite_db_path)
 
 
+@pytest.mark.skipif(
+    not _is_pg_reachable(),
+    reason="Local PostgreSQL not reachable at TEST_DB_URL (port 5434). Run docker container to test."
+)
 def test_sync_to_postgres_preserves_posted_and_video_runs_behavioral(clean_pg_and_sqlite):
     """
     BEHAVIORAL TEST:

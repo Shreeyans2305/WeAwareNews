@@ -20,10 +20,14 @@ def get_db_pool():
         return _pool
 
     database_url = os.getenv("DATABASE_URL")
+    db_pass = os.getenv("DB_PASS") or os.getenv("DB_PASSWORD")
     if database_url:
         import psycopg2.pool
         logger.info("Initializing psycopg2 SimpleConnectionPool (size 1-2)...")
-        _pool = psycopg2.pool.SimpleConnectionPool(1, 2, dsn=database_url)
+        if db_pass:
+            _pool = psycopg2.pool.SimpleConnectionPool(1, 2, dsn=database_url, password=db_pass)
+        else:
+            _pool = psycopg2.pool.SimpleConnectionPool(1, 2, dsn=database_url)
         return _pool
 
     instance_connection_name = os.getenv("INSTANCE_CONNECTION_NAME")

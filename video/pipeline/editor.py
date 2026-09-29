@@ -44,7 +44,9 @@ def edit_script(
     candidate: VideoCandidateResponse,
     script: ScriptOutput,
     client: Optional[genai.Client] = None,
+    model: Optional[str] = None,
 ) -> EditorDecision:
+    target_model = model or settings.gemini_flash_model
     if client is None:
         client = genai.Client(
             vertexai=True,
@@ -67,7 +69,7 @@ def edit_script(
     )
 
     resp = client.models.generate_content(
-        model=settings.gemini_pro_model,
+        model=target_model,
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=_EDITOR_SYSTEM_PROMPT,

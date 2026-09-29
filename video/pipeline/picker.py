@@ -46,10 +46,12 @@ EDITORIAL RULES:
 def pick_story(
     candidates: List[VideoCandidateResponse],
     client: Optional[genai.Client] = None,
+    model: Optional[str] = None,
 ) -> Tuple[VideoCandidateResponse, StoryPickerDecision, List[VideoCandidateResponse]]:
     """
     Ranks candidates and returns (chosen_candidate, decision_metadata, fallback_candidates).
     """
+    target_model = model or settings.gemini_flash_model
     if not candidates:
         raise ValueError("No candidates provided to story picker.")
 
@@ -89,7 +91,7 @@ def pick_story(
     )
 
     resp = client.models.generate_content(
-        model=settings.gemini_flash_model,
+        model=target_model,
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=_SYSTEM_PROMPT,

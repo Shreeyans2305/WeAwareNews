@@ -11,7 +11,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
 from fastapi import FastAPI, Depends, HTTPException, Header, Response, Query, Request
 from fastapi.responses import HTMLResponse
@@ -45,6 +45,35 @@ app = FastAPI(
 )
 
 
+def canonicalize_url(url: Optional[str]) -> str:
+    """
+    Canonicalizes a URL for deduplication:
+    - Lowercase scheme and netloc (hostname)
+    - Strip common tracking query params (utm_*, ref, fbclid, gclid, etc.)
+    - Strip fragments (#...)
+    - Normalize trailing slashes on paths
+    """
+    if not url:
+        return ""
+    try:
+        parsed = urlparse(url.strip())
+        scheme = parsed.scheme.lower()
+        netloc = parsed.netloc.lower()
+        path = parsed.path.rstrip("/")
+        if not path and netloc:
+            path = ""
+        # Filter tracking params
+        filtered_query = [
+            (k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+            if not (k.startswith("utm_") or k.lower() in ("ref", "fbclid", "gclid", "ocid", "cmpid"))
+        ]
+        filtered_query.sort()
+        query_str = urlencode(filtered_query)
+        return urlunparse((scheme, netloc, path, "", query_str, ""))
+    except Exception:
+        return url.strip().lower()
+
+
 def truncate_excerpt(text: Optional[str], max_chars: int = 1200) -> str:
     if not text:
         return ""
@@ -62,6 +91,20 @@ def truncate_excerpt(text: Optional[str], max_chars: int = 1200) -> str:
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "weaware-video-api"}
+
+
+@app.get("/healthz")
+def healthz_check():
+    """Liveness probe running SELECT 1 against database. No auth, no data returned."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1;")
+                cur.fetchone()
+        return Response(status_code=200)
+    except Exception as e:
+        logger.error(f"Healthz check failed: {e}")
+        raise HTTPException(status_code=503, detail="Database unhealthy")
 
 
 @app.get("/stories/video-candidates", response_model=List[VideoCandidateResponse])
@@ -92,7 +135,7 @@ def get_video_candidates(
                 (dedupe_days,),
             )
             row = cur.fetchone()
-            recent_run_urls = set(row[0] or []) if row and row[0] else set()
+            recent_run_urls = {canonicalize_url(u) for u in (row[0] or []) if canonicalize_url(u)}
 
             # 2. Query corroborated stories with no active video runs
             cur.execute(
@@ -146,9 +189,10 @@ def get_video_candidates(
                 if len(distinct_publishers) < min_sources:
                     continue
 
-                # Verify no URL overlap with recent runs
-                story_urls = [r["url"].strip() for r in item_rows if r["url"]]
-                if any(u in recent_run_urls for u in story_urls):
+                # Verify no URL overlap with recent runs (using canonicalized URLs)
+                raw_story_urls = [r["url"].strip() for r in item_rows if r["url"]]
+                canonical_story_urls = [canonicalize_url(u) for u in raw_story_urls if canonicalize_url(u)]
+                if any(u in recent_run_urls for u in canonical_story_urls):
                     continue
 
                 # Select best headline (most recent article with non-empty title)
@@ -178,7 +222,7 @@ def get_video_candidates(
                         headline=best_headline,
                         source_count=len(distinct_publishers),
                         articles=articles,
-                        source_urls=story_urls,
+                        source_urls=canonical_story_urls,
                         combined_story_text=combined_text,
                     )
                 )
@@ -215,6 +259,7 @@ def claim_story_for_video(
                 """
             )
 
+            canonical_source_urls = [canonicalize_url(u) for u in (req.source_urls or []) if canonicalize_url(u)]
             # 2. Atomic claim insert
             cur.execute(
                 """
@@ -244,7 +289,7 @@ def claim_story_for_video(
                     req.timeout_minutes,
                     req.headline_snapshot,
                     json.dumps(req.sources_snapshot),
-                    req.source_urls,
+                    canonical_source_urls,
                     req.story_text_snapshot,
                 ),
             )

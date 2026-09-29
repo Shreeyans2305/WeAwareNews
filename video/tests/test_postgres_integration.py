@@ -28,6 +28,21 @@ from backend.ingestion.store.postgres_store import _SCHEMA as PROD_PG_SCHEMA
 TEST_DB_URL = os.getenv("TEST_DATABASE_URL", "postgresql://postgres:testpass@127.0.0.1:5434/weaware_test")
 
 
+def _is_pg_reachable() -> bool:
+    try:
+        conn = psycopg2.connect(TEST_DB_URL, connect_timeout=1)
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _is_pg_reachable(),
+    reason="Local PostgreSQL not reachable at TEST_DB_URL (port 5434). Run docker container to test."
+)
+
+
 @pytest.fixture(scope="session")
 def setup_pg_database():
     """Ensure test tables exist in local PostgreSQL using production schema."""
@@ -442,3 +457,101 @@ def test_baseline_prompt_structural_freeze():
     assert "no subtitles" in prompt, "Missing clean video rule"
     assert "no watermarks" in prompt, "Missing watermark exclusion rule"
     assert "no on-screen text" in prompt, "Missing on-screen text exclusion rule"
+
+    # Baseline Veo resolution locked at 720p
+    from video.config.settings import settings
+    assert settings.veo_resolution == "720p", "Veo resolution drifted from frozen 720p baseline"
+
+
+def test_real_pg_healthz(pg_client):
+    """Test /healthz endpoint executes SELECT 1 against database and returns 200 with no content."""
+    resp = pg_client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.content == b""
+
+
+def test_real_pg_url_canonicalization_utm_dedupe(pg_client):
+    """
+    Test that URL canonicalization deduplicates stories with utm_* tracking parameters,
+    and stores canonical URLs in video_runs.source_urls.
+    """
+    clean_url = "https://reuters.com/world/exclusive-space-report"
+    variant_url = "https://REUTERS.COM/world/exclusive-space-report/?utm_source=twitter&utm_medium=social&ref=news#top"
+
+    run_id = str(uuid.uuid4())
+    conn = psycopg2.connect(TEST_DB_URL)
+    with conn.cursor() as cur:
+        # Clear tables
+        cur.execute("DELETE FROM items;")
+        cur.execute("DELETE FROM video_runs;")
+        cur.execute("DELETE FROM stories;")
+
+        # 1. Insert historical run with clean URL
+        cur.execute(
+            """
+            INSERT INTO video_runs (
+                run_id, story_id, status, claim_mode, claimed_at,
+                expires_at, heartbeat_at, headline_snapshot,
+                sources_snapshot, source_urls, story_text_snapshot,
+                created_at, updated_at
+            )
+            VALUES (
+                %s, 'historical-story', 'published', 'separate', NOW() - INTERVAL '1 day',
+                NOW() + INTERVAL '1 day', NOW(), 'Historical Headline',
+                '[]', ARRAY[%s], 'Story Text',
+                NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day'
+            )
+            """,
+            (run_id, clean_url),
+        )
+
+        # 2. Insert new candidate story that uses the variant URL with UTM tags
+        new_story_id = f"variant-story-{uuid.uuid4()}"
+        cur.execute(
+            "INSERT INTO stories (story_id, source_count, recency, created_at, posted) VALUES (%s, 2, '2026-09-29', NOW(), false)",
+            (new_story_id,),
+        )
+        cur.execute(
+            """
+            INSERT INTO items (item_hash, source_id, source_name, source_type, region, url, title, raw_text, published_at, fetched_at, paywall, is_social, extraction_status, story_id)
+            VALUES 
+            (%s, 'src1', 'Publisher 1', 'rss', 'us', %s, 'Title 1', %s, NOW(), NOW(), 0, 0, 'ok', %s),
+            (%s, 'src2', 'Publisher 2', 'rss', 'us', 'https://independent.co.uk/story2', 'Title 2', %s, NOW(), NOW(), 0, 0, 'ok', %s)
+            """,
+            (
+                str(uuid.uuid4()), variant_url, "Detailed body text of article 1 that is long enough. " * 5, new_story_id,
+                str(uuid.uuid4()), "Detailed body text of article 2 that is long enough. " * 5, new_story_id,
+            ),
+        )
+    conn.commit()
+    conn.close()
+
+    # 3. Call candidates endpoint: the variant story MUST be excluded because its canonical URL matches clean_url
+    resp = pg_client.get("/stories/video-candidates?dedupe_days=14")
+    assert resp.status_code == 200
+    candidates = resp.json()
+    candidate_ids = [c["story_id"] for c in candidates]
+    assert new_story_id not in candidate_ids, "Candidate with UTM-tagged URL was not deduplicated against clean URL!"
+
+    # 4. Test claim endpoint canonicalizes stored URLs
+    fresh_story_id = f"fresh-story-{uuid.uuid4()}"
+    claim_payload = {
+        "claim_mode": "separate",
+        "timeout_minutes": 30,
+        "headline_snapshot": "Fresh Story",
+        "sources_snapshot": [{"source_name": "Reuters", "url": "https://reuters.com/1?utm_source=rss"}],
+        "source_urls": ["https://reuters.com/1?utm_source=rss&ref=home#frag"],
+        "story_text_snapshot": "Fresh story text",
+    }
+    claim_resp = pg_client.post(f"/stories/{fresh_story_id}/video-claim", json=claim_payload)
+    assert claim_resp.status_code == 201
+
+    # Inspect stored source_urls in database
+    conn = psycopg2.connect(TEST_DB_URL)
+    with conn.cursor() as cur:
+        cur.execute("SELECT source_urls FROM video_runs WHERE story_id = %s", (fresh_story_id,))
+        row = cur.fetchone()
+        assert row is not None
+        stored_urls = row[0]
+        assert stored_urls == ["https://reuters.com/1"], f"Stored URLs were not canonicalized: {stored_urls}"
+    conn.close()

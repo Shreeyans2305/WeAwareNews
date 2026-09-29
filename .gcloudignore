@@ -4,6 +4,25 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Node & Frontend
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+frontend/
+
+# Terraform
+.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*tfplan.txt
+
+# Scratch and test caches
+video/scratch/
+.pytest_cache/
+
 # Environment
 .env
 
@@ -17,5 +36,4 @@ cloud-sql-proxy
 
 # Legacy pipeline output (no longer generated)
 weaware_items.json
-.pytest_cache/
 .git/

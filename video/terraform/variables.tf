@@ -10,16 +10,34 @@ variable "region" {
   default     = "us-central1"
 }
 
+variable "image_tag" {
+  type        = string
+  description = "Image tag from Cloud Build (e.g. $BUILD_ID or specific commit)"
+  default     = "build-initial"
+  validation {
+    condition     = var.image_tag != "latest" && length(var.image_tag) > 0
+    error_message = "Deploying with ':latest' image tag is strictly prohibited. Provide a valid BUILD_ID or release tag."
+  }
+}
+
 variable "video_api_image" {
   type        = string
-  description = "Container image for weaware-video-api"
-  default     = "us-central1-docker.pkg.dev/project-9ba21d45-1dfd-4108-b69/weaware-repo/weaware-video-api:latest"
+  description = "Explicit container image for weaware-video-api (defaults to repo with var.image_tag)"
+  default     = ""
+  validation {
+    condition     = !can(regex(".*:latest$", var.video_api_image))
+    error_message = "Deploying with ':latest' image tag is strictly prohibited."
+  }
 }
 
 variable "video_job_image" {
   type        = string
-  description = "Container image for weaware-video-job"
-  default     = "us-central1-docker.pkg.dev/project-9ba21d45-1dfd-4108-b69/weaware-repo/weaware-video-job:latest"
+  description = "Explicit container image for weaware-video-job (defaults to repo with var.image_tag)"
+  default     = ""
+  validation {
+    condition     = !can(regex(".*:latest$", var.video_job_image))
+    error_message = "Deploying with ':latest' image tag is strictly prohibited."
+  }
 }
 
 variable "ingestion_trigger_id" {

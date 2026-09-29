@@ -92,18 +92,22 @@ def process_video_and_metadata(
     # 4. FFmpeg Command
     # Filters:
     # - loudnorm (normalize loudness to -14 LUFS)
-    # - scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2
-    # - drawtext for lower-third source attribution
-    # - subtitles burning with safe margins (marginV=160 to avoid Reels UI overlays)
-    drawtext_filter = (
-        f"drawtext=text='{escaped_sources}':x=(w-text_w)/2:y=h-240:"
-        f"fontsize=28:fontcolor=white:box=1:boxcolor=black@0.6:boxborderw=10"
-    )
+    if getattr(settings, "final_output_1080p", True):
+        scale_filter = "scale=1080:1920:flags=lanczos:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2"
+        drawtext_filter = (
+            f"drawtext=text='{escaped_sources}':x=(w-text_w)/2:y=h-240:"
+            f"fontsize=28:fontcolor=white:box=1:boxcolor=black@0.6:boxborderw=10"
+        )
+        subtitles_filter = f"subtitles={srt_file.resolve()}:force_style='FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,Outline=2,Shadow=0,MarginV=160'"
+    else:
+        scale_filter = "scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2"
+        drawtext_filter = (
+            f"drawtext=text='{escaped_sources}':x=(w-text_w)/2:y=h-160:"
+            f"fontsize=20:fontcolor=white:box=1:boxcolor=black@0.6:boxborderw=8"
+        )
+        subtitles_filter = f"subtitles={srt_file.resolve()}:force_style='FontSize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,Outline=2,Shadow=0,MarginV=110'"
 
-    # Subtitles filter
-    subtitles_filter = f"subtitles={srt_file.resolve()}:force_style='FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,Outline=2,Shadow=0,MarginV=160'"
-
-    vf_filters = f"scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,{drawtext_filter},{subtitles_filter}"
+    vf_filters = f"{scale_filter},{drawtext_filter},{subtitles_filter}"
 
     cmd = [
         "ffmpeg", "-y",
