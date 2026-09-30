@@ -86,21 +86,6 @@ $RECYCLE.BIN/
 *.back
 *.backup
 
-# ─── Acode (mobile) + other mobile editors — hide all traces ───
-.acode/
-.acode/*
-*.acode
-.acode-project
-foxdebug/
-.foxdebug/
-*Acode*
-# Termux / Android file-manager leftovers
-.termux/
-*.termux
-# Common mobile-editor / FTP sync leftovers
-.ftpconfig
-sftp-config.json
-.ftpsync
 # Phone camera / screenshot dumps accidentally added to repo root
 1000*.png
 *Photoroom*
