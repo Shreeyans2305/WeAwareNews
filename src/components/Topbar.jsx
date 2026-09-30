@@ -1,6 +1,6 @@
-import { Search } from 'lucide-react'
-import { ACCENT } from '../theme.js'
+import { Moon, Search, Sun } from 'lucide-react'
 import { TOPICS } from '../data/stories.js'
+import { useTheme } from '../theme.js'
 
 const PAGES = [
   { id: 'feed', label: 'Feed' },
@@ -9,85 +9,90 @@ const PAGES = [
   { id: 'about', label: 'About' },
 ]
 
-export default function Topbar({
-  page,
-  onNavigate,
-  activeTopic,
-  onTopic,
-  query,
-  onQuery,
-  onHome,
-}) {
+export default function Topbar({ page, onNavigate, activeTopic, onTopic, query, onQuery, onHome }) {
+  const { theme, toggle } = useTheme()
+  const dark = theme === 'dark'
   const isFeed = page === 'feed'
 
   return (
-    <header className="sticky top-0 z-30 border-b border-white/10 bg-black/80 backdrop-blur-xl">
-      <div className="flex flex-wrap items-center gap-3 px-6 py-3 md:px-12 md:py-4">
-        <button type="button" onClick={onHome} aria-label="Back to WeAware home" className="shrink-0">
-          <img src="/weaware-logo.png" alt="WeAware" className="h-9 w-auto" />
+    <div className="t-bg sticky top-0 z-30 px-4 pt-3 md:px-8">
+      <header className="glass-nav mx-auto flex max-w-4xl items-center gap-4 rounded-2xl px-4 py-2.5">
+        <button type="button" onClick={onHome} aria-label="Back to WeAware home" className="flex shrink-0 items-center gap-2">
+          <img src="/weaware-logo.png" alt="WeAware" className="h-6 w-auto" />
+          <span className="font-display text-[15px] font-bold tracking-tight">WeAware</span>
         </button>
 
-        <nav aria-label="Primary" className="perspective-stage flex flex-wrap items-center gap-1">
-          {PAGES.map((link) => {
-            const active = page === link.id
-            return (
-              <button
-                key={link.id}
-                type="button"
-                onClick={() => onNavigate(link.id)}
-                aria-current={active ? 'page' : undefined}
-                className={`nav-3d rounded-full px-4 py-1.5 text-[15px] transition-colors md:px-5 ${
-                  active
-                    ? 'bg-white text-black'
-                    : 'text-white/60 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                {link.label}
-              </button>
-            )
-          })}
+        <nav aria-label="Primary" className="hidden items-center gap-5 md:flex">
+          {PAGES.map((link) => (
+            <button
+              key={link.id}
+              type="button"
+              onClick={() => onNavigate(link.id)}
+              aria-current={page === link.id ? 'page' : undefined}
+              data-active={page === link.id}
+              className="nav-link"
+            >
+              {link.label}
+            </button>
+          ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-4">
+        <nav aria-label="Primary mobile" className="flex items-center gap-4 md:hidden">
+          {PAGES.slice(0, 3).map((link) => (
+            <button
+              key={link.id}
+              type="button"
+              onClick={() => onNavigate(link.id)}
+              aria-current={page === link.id ? 'page' : undefined}
+              data-active={page === link.id}
+              className="nav-link"
+            >
+              {link.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="ml-auto flex items-center gap-1">
           {isFeed && (
-            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 transition-colors focus-within:border-white/30">
-              <Search className="h-4 w-4 shrink-0 text-white/40" />
+            <div className="flex items-center gap-2">
+              <Search className="t-faint h-4 w-4 shrink-0" />
               <input
                 value={query}
                 onChange={(e) => onQuery(e.target.value)}
-                placeholder="Search stories…"
+                placeholder="Search"
                 aria-label="Search stories"
-                className="w-36 bg-transparent text-sm text-white outline-none placeholder-white/35 md:w-56"
+                className="t-field w-20 bg-transparent text-sm outline-none placeholder:text-[var(--faint)] focus:w-36 md:w-28 md:focus:w-44"
+                style={{ transition: 'width 200ms ease' }}
               />
             </div>
           )}
-          <div className="hidden items-center gap-2 sm:flex">
-            <span className="signal-dot h-1.5 w-1.5 rounded-full" style={{ backgroundColor: ACCENT }} />
-            <span className="text-xs text-white/60">Agents active</span>
-          </div>
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+            className="icon-btn"
+          >
+            {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
         </div>
-      </div>
+      </header>
 
       {isFeed && (
-        <div className="flex items-center gap-1 overflow-x-auto px-6 pb-3 md:px-12">
-          {['All', ...TOPICS].map((topic) => {
-            const active = activeTopic === topic
-            return (
-              <button
-                key={topic}
-                type="button"
-                onClick={() => onTopic(topic)}
-                aria-pressed={active}
-                className={`nav-3d shrink-0 rounded-full px-5 py-1.5 text-[15px] transition-colors ${
-                  active ? 'bg-white text-black' : 'text-white/60 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                {topic}
-              </button>
-            )
-          })}
+        <div className="mx-auto flex max-w-4xl items-center gap-5 overflow-x-auto px-4 pb-2 pt-2.5">
+          {['All', ...TOPICS].map((topic) => (
+            <button
+              key={topic}
+              type="button"
+              onClick={() => onTopic(topic)}
+              aria-pressed={activeTopic === topic}
+              data-active={activeTopic === topic}
+              className="topic-link"
+            >
+              {topic}
+            </button>
+          ))}
         </div>
       )}
-    </header>
+    </div>
   )
 }

@@ -1,4 +1,4 @@
-# Dependencies
+# ─── Dependencies ───
 node_modules/
 .pnp
 .pnp.*
@@ -7,14 +7,21 @@ node_modules/
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+bower_components/
 
-# Build outputs
+# Keep lockfile (npm) — needed for reproducible installs
+# package-lock.json is intentionally NOT ignored
+
+# ─── Build outputs (Vite / React) ───
 dist/
 dist-ssr/
 build/
 *.local
+*.tsbuildinfo
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
 
-# Logs
+# ─── Logs ───
 logs/
 *.log
 npm-debug.log*
@@ -23,39 +30,30 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Runtime data
+# ─── Runtime / cache ───
 pids/
 *.pid
 *.seed
 *.pid.lock
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.vite/
+*.tmp
+*.temp
 
-# Environment variables - never commit secrets
+# ─── Env / secrets — never commit ───
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 .env*.local
+*.pem
+*.key
 
-# Vite
-vite.config.js.timestamp-*
-vite.config.ts.timestamp-*
-*.tsbuildinfo
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-*.swp
-*.swo
-*~
-
-# OS generated files
+# ─── OS files ───
 .DS_Store
 .DS_Store?
 ._*
@@ -64,20 +62,82 @@ vite.config.ts.timestamp-*
 ehthumbs.db
 Thumbs.db
 Desktop.ini
+$RECYCLE.BIN/
 
-# Test coverage
+# ─── Editors / IDEs ───
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+# JetBrains
+.idea/
+*.iml
+# Sublime / Vim / Emacs
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+*~
+*.bak
+*.orig
+# General editor backup
+*.back
+*.backup
+
+# ─── Acode (mobile) + other mobile editors — hide all traces ───
+.acode/
+.acode/*
+*.acode
+.acode-project
+foxdebug/
+.foxdebug/
+*Acode*
+# Termux / Android file-manager leftovers
+.termux/
+*.termux
+# Common mobile-editor / FTP sync leftovers
+.ftpconfig
+sftp-config.json
+.ftpsync
+# Phone camera / screenshot dumps accidentally added to repo root
+1000*.png
+*Photoroom*
+*photoroom*
+Screenshot_*.png
+Screenshot_*.jpg
+IMG_*.jpg
+IMG_*.png
+VID_*.mp4
+
+# ─── AI / agent tooling — never push ───
+.opencode/
+.opencode/*
+.openai/
+.claude/
+.cursor/
+.cursorrules
+.agent/
+.ai/
+codex/
+.opencode-node/
+*.agent.json
+
+# ─── Python (used by some tooling scripts) ───
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.coverage
+
+# ─── Tests / coverage ───
 coverage/
 *.lcov
 .nyc_output/
 
-# Temporary files
-*.tmp
-*.temp
-.cache/
-.parcel-cache/
-.eslintcache
-.stylelintcache
-
-# OpenCode local tooling (project skills in .opencode/skills are kept, install cache is not)
-.opencode/node_modules/
-.opencode/package-lock.json
+# ─── Misc ───
+*.tgz
+*.zip

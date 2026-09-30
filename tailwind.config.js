@@ -4,8 +4,10 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Kanit', 'Geist', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-        display: ['Kanit', 'Geist', 'sans-serif'],
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        display: ['Newsreader', 'Georgia', 'serif'],
+        serif: ['Newsreader', 'Source Serif 4', 'Georgia', 'serif'],
+        bodyserif: ['Source Serif 4', 'Georgia', 'serif'],
       },
     },
   },

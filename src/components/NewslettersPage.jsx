@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import { CheckCircle2, MailOpen, Send } from 'lucide-react'
+import { CheckCircle2, MailOpen, Scissors, Send } from 'lucide-react'
 import { newsletters } from '../data/editions.js'
 import { stories } from '../data/stories.js'
 import Reveal from './Reveal.jsx'
 import NewsletterPersonalizer from './NewsletterPersonalizer.jsx'
+import NewsletterMasthead from './NewsletterMasthead.jsx'
+import FrontPageGrid from './FrontPageGrid.jsx'
 
-const ACCENT = '#00F0FF'
-
-function SubscribeForm({ compact = false }) {
+function SubscribeForm({ id = 'newsletter-email', large = false }) {
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState('idle')
   const [error, setError] = useState('')
@@ -27,29 +27,24 @@ function SubscribeForm({ compact = false }) {
 
   if (status === 'success') {
     return (
-      <div
-        role="status"
-        className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4"
-      >
-        <CheckCircle2 className="h-5 w-5 shrink-0" style={{ color: ACCENT }} />
+      <div role="status" className="t-card t-border flex items-center gap-3 border p-4">
+        <CheckCircle2 className="h-5 w-5 shrink-0" />
         <div>
-          <p className="text-sm font-medium text-white">You are on the list.</p>
-          <p className="text-sm text-white/55">
-            First Crosscheck lands tomorrow morning. No spam, unsubscribe anytime.
-          </p>
+          <p className="text-sm font-medium">You are on the list.</p>
+          <p className="t-muted text-sm">First Crosscheck lands tomorrow morning. No spam, unsubscribe anytime.</p>
         </div>
       </div>
     )
   }
 
   return (
-    <form onSubmit={submit} noValidate className={compact ? '' : 'mt-8 max-w-xl'}>
-      <div className="flex flex-col gap-2 rounded-2xl bg-white p-1.5 shadow-2xl sm:flex-row sm:items-center sm:rounded-full">
-        <label htmlFor="newsletter-email" className="sr-only">
+    <form onSubmit={submit} noValidate className={large ? 'mx-auto mt-6 max-w-xl' : 'mt-4'}>
+      <div className="t-card t-border flex flex-col gap-2 border p-1.5 sm:flex-row sm:items-center">
+        <label htmlFor={id} className="sr-only">
           Email address
         </label>
         <input
-          id="newsletter-email"
+          id={id}
           type="email"
           autoComplete="email"
           value={email}
@@ -59,33 +54,41 @@ function SubscribeForm({ compact = false }) {
           }}
           placeholder="you@example.com"
           aria-invalid={status === 'error'}
-          aria-describedby={status === 'error' ? 'newsletter-error' : undefined}
-          className="w-full flex-1 rounded-xl bg-transparent px-4 py-2.5 text-sm text-gray-900 outline-none placeholder-gray-400 sm:rounded-full"
+          aria-describedby={status === 'error' ? `${id}-error` : undefined}
+          className="t-field w-full flex-1 bg-transparent px-4 py-2.5 text-sm outline-none"
         />
         <button
           type="submit"
           disabled={status === 'loading'}
-          className="flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60 sm:rounded-full"
-          style={{
-            background: 'linear-gradient(to bottom, #2B2B2B, #101010)',
-            border: `1px solid ${ACCENT}4D`,
-            boxShadow: '0 0 24px rgba(0, 240, 255, 0.18)',
-          }}
+          className="t-btn-primary flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium disabled:opacity-60"
         >
           <Send className="h-4 w-4" />
           {status === 'loading' ? 'Joining…' : 'Subscribe'}
         </button>
       </div>
       {status === 'error' ? (
-        <p id="newsletter-error" role="alert" className="mt-2 pl-2 text-sm text-red-300">
+        <p id={`${id}-error`} role="alert" className="mt-2 pl-2 text-sm">
           {error}
         </p>
       ) : (
-        <p className="mt-2 pl-2 text-xs text-white/40">
-          One email per edition. Read a sample below before you decide.
-        </p>
+        <p className="t-faint mt-2 pl-2 text-xs">One email per edition. Read a sample below before you decide.</p>
       )}
     </form>
+  )
+}
+
+function SectionHeader({ index, title, blurb }) {
+  return (
+    <div className="flex items-center gap-4">
+      <div className="t-border h-px flex-1 border-t" aria-hidden="true" />
+      <div className="text-center">
+        <p className="kicker">
+          Section {index} {title}
+        </p>
+        {blurb ? <p className="t-muted mt-1 text-sm">{blurb}</p> : null}
+      </div>
+      <div className="t-border h-px flex-1 border-t" aria-hidden="true" />
+    </div>
   )
 }
 
@@ -101,125 +104,149 @@ export default function NewslettersPage({ onOpenStory }) {
     })
   }
 
-  const sampleStory = stories[0]
+  const ticker = stories.slice(0, 3).map((s) => ({ id: s.id, title: s.title, consensus: s.consensus }))
+  const archive = stories.slice(10, 14)
 
   return (
     <div className="page-enter">
-      <section className="relative overflow-hidden px-6 pb-12 pt-14 md:px-12 md:pt-20">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-40 left-1/2 h-96 w-[42rem] -translate-x-1/2 rounded-full opacity-20 blur-3xl"
-          style={{ background: 'radial-gradient(closest-side, rgba(0,240,255,0.55), transparent)' }}
-        />
-        <div className="perspective-stage relative max-w-3xl">
-          <p className="stagger-item eyebrow-kanit text-[12px] text-white/50" style={{ '--i': 0 }}>
-            Newsletters
-          </p>
-          <h1
-            className="stagger-item mt-3 font-display text-5xl font-extrabold leading-[1.02] tracking-tight text-white md:text-6xl"
-            style={{ '--i': 1 }}
-          >
-            <span className="display-3d display-3d-gradient">The feed, distilled. Disagreement kept in.</span>
-          </h1>
-          <p className="stagger-item mt-4 max-w-xl font-display text-lg font-medium leading-relaxed text-white/70 md:text-xl" style={{ '--i': 2 }}>
-            Each edition starts from cross-checked stories, shows where sources agree, and
-            names the claim to treat with care. Pick the rhythm that fits your mornings.
-          </p>
-          <div className="stagger-item" style={{ '--i': 3 }}>
-            <SubscribeForm />
-          </div>
+      <NewsletterMasthead ticker={ticker} />
+
+      <div className="t-border mx-6 mt-6 border md:mx-12">
+        <div className="mx-auto max-w-6xl">
+          <FrontPageGrid stories={stories} onOpenStory={onOpenStory} />
         </div>
-      </section>
+      </div>
 
-      <section className="px-6 pb-4 pt-6 md:px-12">
-        <NewsletterPersonalizer />
-      </section>
-
-      <section className="px-6 pb-4 pt-6 md:px-12">
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-          {newsletters.map((letter, i) => {
-            const active = subscribed.has(letter.id)
-            return (
-              <article
-                key={letter.id}
-                style={{ '--i': i }}
-                className="stagger-item lift flex flex-col rounded-2xl border border-white/10 bg-white/[0.04] p-6"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/50">
-                    {letter.topic}
-                  </span>
-                  <span className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-xs text-white/60">
-                    {letter.cadence}
-                  </span>
-                </div>
-                <h2 className="card-title-3d mt-3 font-display text-2xl font-extrabold tracking-tight text-white">{letter.name}</h2>
-                <p className="mt-2 text-sm leading-relaxed text-white/60">{letter.description}</p>
-                <p className="mt-4 rounded-xl border border-white/10 bg-black/40 p-3 text-xs leading-relaxed text-white/50">
-                  <span className="mb-1 flex items-center gap-1.5 font-medium text-white/70">
-                    <MailOpen className="h-3.5 w-3.5" style={{ color: ACCENT }} />
-                    In the latest issue
-                  </span>
-                  {letter.sample}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => toggle(letter.id)}
-                  aria-pressed={active}
-                  className={`mt-5 rounded-full px-5 py-2.5 text-sm font-medium transition-colors ${
-                    active
-                      ? 'bg-white text-black hover:bg-white/85'
-                      : 'border text-white hover:bg-white/10'
-                  }`}
-                  style={active ? undefined : { borderColor: `${ACCENT}4D` }}
+      {/* Section B: editions */}
+      <section aria-label="Choose your section" className="px-6 py-10 md:px-12">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <SectionHeader index="B" title="Choose your section" blurb="Three editions. Pick the rhythm that fits your mornings." />
+          </Reveal>
+          <div className="mt-8 grid grid-cols-1 gap-0 border t-border md:grid-cols-3">
+            {newsletters.map((letter, i) => {
+              const active = subscribed.has(letter.id)
+              const headlines = letter.sample.split(',').map((h) => h.trim())
+              return (
+                <article
+                  key={letter.id}
+                  style={{ '--i': i }}
+                  className={`stagger-item flex flex-col p-6 md:p-7 ${i > 0 ? 't-border border-t md:border-l md:border-t-0' : ''}`}
                 >
-                  {active ? 'Subscribed' : `Subscribe to ${letter.name}`}
-                </button>
-              </article>
-            )
-          })}
+                  <p className="kicker">{letter.topic}</p>
+                  <h2 className="headline-serif mt-2 text-3xl">{letter.name}</h2>
+                  <p className="t-muted mt-1 text-xs font-semibold uppercase tracking-[0.14em]">{letter.cadence}</p>
+                  <p className="t-muted font-body-serif mt-3 text-[15px] leading-relaxed">{letter.description}</p>
+                  <div className="t-border mt-4 border-t pt-4">
+                    <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em]">
+                      <MailOpen className="h-3.5 w-3.5" />
+                      In the latest issue
+                    </p>
+                    <ul className="mt-2 list-none space-y-1.5">
+                      {headlines.map((h) => (
+                        <li key={h} className="font-body-serif text-sm leading-snug">
+                          <span className="t-faint mr-2">▪</span>
+                          {h}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggle(letter.id)}
+                    aria-pressed={active}
+                    className={
+                      active
+                        ? 't-btn-primary mt-6 px-5 py-2.5 text-sm font-medium'
+                        : 't-btn-outline mt-6 px-5 py-2.5 text-sm font-medium'
+                    }
+                  >
+                    {active ? 'Subscribed' : `Subscribe to ${letter.name}`}
+                  </button>
+                </article>
+              )
+            })}
+          </div>
         </div>
       </section>
 
-      <Reveal className="px-6 py-12 md:px-12">
-        <div className="grid grid-cols-1 gap-6 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] lg:grid-cols-2">
-          <div className="p-8 md:p-10">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: ACCENT }}>
-              Sample story
-            </p>
-            <h2 className="card-title-3d mt-3 font-display text-3xl font-extrabold tracking-tight text-white md:text-4xl">
-              {sampleStory.title}
-            </h2>
-            <p className="mt-3 leading-relaxed text-white/60">{sampleStory.summary}</p>
-            <div className="mt-5 flex items-center gap-3 text-sm text-white/50">
-              <span className="rounded-full bg-white/10 px-3 py-1 font-semibold text-white">
-                {sampleStory.consensus}% consensus
-              </span>
-              <span>{sampleStory.sources.length} sources cross-checked</span>
+      {/* Coupon: personalizer */}
+      <section aria-label="Personal briefing coupon" className="px-6 pb-4 md:px-12">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <div className="coupon-edge p-2">
+              <div className="t-card t-border border p-6 md:p-8">
+                <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em]">
+                  <Scissors className="h-4 w-4" />
+                  Clip and save: your Friday briefing
+                </p>
+                <p className="t-muted mt-2 max-w-2xl text-sm leading-relaxed">
+                  Pick topics once. We mock the email you would get, with consensus kept in and outrage left
+                  out. Saved locally, frontend only.
+                </p>
+                <div className="mt-6">
+                  <NewsletterPersonalizer />
+                </div>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => onOpenStory(sampleStory.id)}
-              className="mt-7 rounded-full bg-white px-6 py-2.5 text-sm font-medium text-black transition-colors hover:bg-white/85"
-            >
-              Read this cross-check
-            </button>
-          </div>
-          <div className="border-t border-white/10 bg-black/50 p-8 md:p-10 lg:border-l lg:border-t-0">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/50">
-              What subscribers see first
-            </h3>
-            <ul className="mt-4 space-y-3">
-              {sampleStory.sources.slice(0, 3).map((source) => (
-                <li key={source.outlet} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-sm font-medium text-white">{source.outlet}</p>
-                  <p className="mt-1 text-sm text-white/55">{source.note}</p>
-                </li>
-              ))}
-            </ul>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* Archive strip */}
+      <section aria-label="Past issues" className="px-6 py-10 md:px-12">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <SectionHeader index="C" title="From the archive" blurb="Recent issues. Every claim traceable to its sources." />
+          </Reveal>
+          <div className="t-border mt-8 grid grid-cols-1 gap-0 border sm:grid-cols-2 lg:grid-cols-4">
+            {archive.map((s, i) => (
+              <article
+                key={s.id}
+                className={`p-6 ${i > 0 ? 't-border border-t sm:border-l sm:border-t-0' : ''} ${
+                  i === 2 ? 'max-lg:border-t max-lg:sm:border-l-0' : ''
+                } ${i === 3 ? 'max-lg:border-t max-lg:sm:border-l' : ''}`}
+              >
+                <p className="kicker">
+                  Issue No. {13 - i} · {s.topic}
+                </p>
+                <h3 className="headline-serif mt-2 text-lg leading-snug">
+                  <button type="button" onClick={() => onOpenStory(s.id)} className="text-left">
+                    {s.title}
+                  </button>
+                </h3>
+                <p className="t-faint mt-2 text-xs">
+                  {s.publishedAt} · {s.consensus}% consensus · {s.readMins} min
+                </p>
+              </article>
+            ))}
           </div>
         </div>
-      </Reveal>
+      </section>
+
+      {/* Subscription folio */}
+      <section aria-label="Subscribe" className="px-6 pb-14 md:px-12">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <div className="border p-1.5 t-border">
+              <div className="t-card t-border border px-6 py-10 text-center md:px-12 md:py-12">
+                <p className="kicker">Home delivery to your inbox</p>
+                <h2 className="headline-serif mx-auto mt-3 max-w-2xl text-3xl md:text-4xl">
+                  Get the morning paper without the pulp.
+                </h2>
+                <p className="t-muted font-body-serif mx-auto mt-3 max-w-xl text-[15px] leading-relaxed">
+                  One email per edition. Cross-checked stories, source stances, and one flagged claim to read
+                  twice.
+                </p>
+                <SubscribeForm id="newsletter-email-folio" large />
+                <p className="t-faint mt-6 text-[11px] uppercase tracking-[0.16em]">
+                  Set in Newsreader and Source Serif · Composed by WeAware Agents
+                </p>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
     </div>
   )
 }

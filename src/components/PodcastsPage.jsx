@@ -1,216 +1,229 @@
-import { useEffect, useRef, useState } from 'react'
-import { Pause, Play } from 'lucide-react'
+import { useState } from 'react'
+import { CheckCircle2, Copy, Mic, Scissors } from 'lucide-react'
 import { episodes } from '../data/editions.js'
 import { stories } from '../data/stories.js'
 import Reveal from './Reveal.jsx'
 import ListenAudiobook from './ListenAudiobook.jsx'
+import { PodcastReadingRoom } from './PodcastReadingRoom.jsx'
 
-const ACCENT = '#00F0FF'
-
-function useSimulatedProgress(playing, durationSeconds = 100) {
-  const [elapsed, setElapsed] = useState(0)
-  useEffect(() => {
-    if (!playing) return
-    const id = window.setInterval(() => {
-      setElapsed((prev) => (prev + 1 >= durationSeconds ? 0 : prev + 1))
-    }, 1000)
-    return () => window.clearInterval(id)
-  }, [playing, durationSeconds])
-  useEffect(() => {
-    if (!playing) setElapsed((v) => v)
-  }, [playing])
-  return [elapsed, setElapsed]
+function SectionHeader({ index, title, blurb }) {
+  return (
+    <div className="flex items-center gap-4">
+      <div className="t-border h-px flex-1 border-t" aria-hidden="true" />
+      <div className="text-center">
+        <p className="kicker">
+          Section {index} {title}
+        </p>
+        {blurb ? <p className="t-muted mt-1 text-sm">{blurb}</p> : null}
+      </div>
+      <div className="t-border h-px flex-1 border-t" aria-hidden="true" />
+    </div>
+  )
 }
 
-function formatTime(totalSeconds) {
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${minutes}:${String(seconds).padStart(2, '0')}`
+function FollowFolio({ onPlayLatest }) {
+  const [copied, setCopied] = useState(false)
+  const feedUrl = 'https://weaware.news/podcasts/feed.xml'
+
+  const copyFeed = async () => {
+    try {
+      await navigator.clipboard.writeText(feedUrl)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = feedUrl
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 2000)
+  }
+
+  const scrollToDesk = () => {
+    if (onPlayLatest) {
+      onPlayLatest()
+      return
+    }
+    document.getElementById('podcast-desk')?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  return (
+    <div className="border t-border p-1.5">
+      <div className="t-card t-border border px-6 py-10 text-center md:px-12 md:py-12">
+        <p className="kicker">Follow the shows</p>
+        <h2 className="headline-serif mx-auto mt-3 max-w-2xl text-3xl md:text-4xl">
+          Take the briefing with you.
+        </h2>
+        <p className="t-muted font-body-serif mx-auto mt-3 max-w-xl text-[15px] leading-relaxed">
+          Copy the demo feed for your podcast app, or start with the latest brief above.
+          Final feed URL ships with launch.
+        </p>
+        <div className="mx-auto mt-6 flex max-w-xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-center">
+          <button
+            type="button"
+            onClick={copyFeed}
+            className="t-btn-primary flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium"
+          >
+            {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied ? 'Copied' : 'Copy feed URL'}
+          </button>
+          <button
+            type="button"
+            onClick={scrollToDesk}
+            className="t-btn-outline px-6 py-2.5 text-sm font-medium"
+          >
+            Play latest brief
+          </button>
+        </div>
+        {copied ? (
+          <p role="status" className="t-muted mt-3 text-xs">Feed URL copied. Paste it in your podcast app.</p>
+        ) : (
+          <p className="t-faint mt-3 text-xs">Demo feed only. No signup needed to listen above.</p>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default function PodcastsPage({ onListen, currentListenId, listeningPlaying }) {
-  const [currentId, setCurrentId] = useState(episodes[0].id)
-  const [playing, setPlaying] = useState(false)
-  const [elapsed, setElapsed] = useSimulatedProgress(playing, 1080)
-  const progressRef = useRef(null)
-
-  const current = episodes.find((episode) => episode.id === currentId) ?? episodes[0]
-
-  const selectEpisode = (id) => {
-    if (id !== currentId) {
-      setCurrentId(id)
-      setElapsed(0)
-      setPlaying(true)
-    } else {
-      setPlaying((prev) => !prev)
-    }
+  const scrollToDesk = () => {
+    document.getElementById('podcast-desk')?.scrollIntoView({ behavior: 'smooth' })
   }
-
-  const progress = Math.min(100, (elapsed / 1080) * 100)
 
   return (
     <div className="page-enter">
-      <section className="perspective-stage px-6 pb-10 pt-14 md:px-12 md:pt-20">
-        <div className="max-w-3xl">
-          <p className="stagger-item eyebrow-kanit text-[12px] text-white/50" style={{ '--i': 0 }}>
-            Podcasts
-          </p>
-          <h1 className="stagger-item mt-3 font-display text-5xl font-extrabold leading-[1.02] tracking-tight text-white md:text-6xl" style={{ '--i': 1 }}>
-            <span className="display-3d display-3d-gradient">Listen to the disagreement, not just the headline.</span>
+      <section className="px-6 pb-8 pt-14 md:px-12 md:pt-20">
+        <div className="mx-auto max-w-6xl">
+          <p className="stagger-item kicker" style={{ '--i': 0 }}>Podcasts</p>
+          <h1 className="stagger-item masthead-title mt-3 text-5xl md:text-7xl" style={{ '--i': 1 }}>
+            Listen to the disagreement, not just the headline.
           </h1>
-          <p className="stagger-item mt-4 max-w-xl font-display text-lg font-medium leading-relaxed text-white/70 md:text-xl" style={{ '--i': 2 }}>
-            Two shows from the same newsroom. One briefs you in minutes, the other stays
-            with one story until the sources stop contradicting each other.
+          <p className="stagger-item t-muted font-body-serif mt-4 max-w-2xl text-[17px] leading-relaxed md:text-lg" style={{ '--i': 2 }}>
+            Two shows from the same newsroom. One briefs you in minutes, the other stays with one story until the
+            sources stop contradicting each other.
+          </p>
+          <div className="stagger-item rule-double-wrap mt-8" style={{ '--i': 3 }} aria-hidden="true">
+            <div className="rule-thick" />
+            <div className="rule-thin" />
+          </div>
+          <p className="stagger-item byline mt-3" style={{ '--i': 4 }}>
+            2 shows · Weekday brief plus Thursday discussion · Sources listed in notes
           </p>
         </div>
       </section>
 
-      <section className="px-6 pt-6 md:px-12">
-        <ListenAudiobook
-          stories={stories}
-          currentId={currentListenId}
-          playing={listeningPlaying}
-          onSelect={(id) => onListen && onListen(id)}
-          onPlayAll={() => onListen && onListen(stories[0].id)}
-        />
+      <section aria-label="Choose your show" className="px-6 py-10 md:px-12">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <SectionHeader index="B" title="Choose your show" blurb="Two rhythms. Pick the one that fits your morning." />
+          </Reveal>
+          <div className="t-border mt-8 grid grid-cols-1 gap-0 border md:grid-cols-2">
+            <article className="stagger-item p-6 md:p-8" style={{ '--i': 0 }}>
+              <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em]">
+                <Mic className="h-4 w-4" aria-hidden="true" />
+                Weekday mornings
+              </p>
+              <h2 className="headline-serif mt-2 text-3xl">WeAware Daily Brief</h2>
+              <p className="t-muted mt-1 text-xs font-semibold uppercase tracking-[0.14em]">Daily, 15 to 18 min</p>
+              <p className="t-muted font-body-serif mt-3 text-[15px] leading-relaxed">
+                Three stories, consensus scores read aloud, and the one flagged claim to read twice before lunch.
+              </p>
+              <p className="t-faint mt-4 text-xs uppercase tracking-[0.14em]">New episodes weekday mornings</p>
+            </article>
+            <article className="stagger-item t-border border-t p-6 md:border-l md:border-t-0 md:p-8" style={{ '--i': 1 }}>
+              <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em]">
+                <Mic className="h-4 w-4" aria-hidden="true" />
+                Thursday discussion
+              </p>
+              <h2 className="headline-serif mt-2 text-3xl">The Disagreement</h2>
+              <p className="t-muted mt-1 text-xs font-semibold uppercase tracking-[0.14em]">Weekly, 21 to 24 min</p>
+              <p className="t-muted font-body-serif mt-3 text-[15px] leading-relaxed">
+                One contested story, all source stances on the table, and what would need to change for consensus to move.
+              </p>
+              <p className="t-faint mt-4 text-xs uppercase tracking-[0.14em]">New episodes every Thursday</p>
+            </article>
+          </div>
+        </div>
       </section>
 
-      <section className="px-6 md:px-12">
-        <div className="stagger-item overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]" style={{ '--i': 3 }}>
-          <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="p-8 md:p-10">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPlaying((prev) => !prev)}
-                  aria-label={playing ? `Pause ${current.title}` : `Play ${current.title}`}
-                  aria-pressed={playing}
-                  className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black transition-transform hover:scale-105"
-                >
-                  {playing ? <Pause className="h-6 w-6" /> : <Play className="ml-0.5 h-6 w-6" />}
-                </button>
-                <div
-                  aria-hidden="true"
-                  className={`flex h-6 items-end gap-1 ${playing ? '' : 'eq-paused'}`}
-                >
-                  <span className="eq-bar w-1 rounded-full" style={{ height: '100%', backgroundColor: ACCENT }} />
-                  <span className="eq-bar w-1 rounded-full" style={{ height: '100%', backgroundColor: ACCENT }} />
-                  <span className="eq-bar w-1 rounded-full" style={{ height: '100%', backgroundColor: ACCENT }} />
-                </div>
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-white/50">{current.show}</p>
-                  <p className="text-sm text-white/70">{playing ? 'Now playing' : 'Paused'}</p>
-                </div>
-              </div>
+      <section aria-label="Listening desk" className="px-6 pb-4 md:px-12">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <SectionHeader index="C" title="Listening desk" blurb="Mock audio. Every claim links back to original reporting." />
+          </Reveal>
+          <Reveal className="mt-8">
+            <div id="podcast-desk">
+              <PodcastReadingRoom episodes={episodes} />
+            </div>
+          </Reveal>
+        </div>
+      </section>
 
-              <h2 className="mt-5 font-display text-3xl font-extrabold tracking-tight text-white md:text-4xl">
-                {current.title}
-              </h2>
-              <p className="mt-3 leading-relaxed text-white/60">{current.description}</p>
-
-              <div className="mt-6">
-                <div className="flex items-center justify-between text-xs text-white/50">
-                  <span>{formatTime(elapsed)}</span>
-                  <span>{current.duration}</span>
-                </div>
-                <div
-                  ref={progressRef}
-                  role="progressbar"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(progress)}
-                  aria-label={`Progress for ${current.title}`}
-                  className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10"
-                >
-                  <div
-                    className="h-full rounded-full transition-[width] duration-500"
-                    style={{
-                      width: `${progress}%`,
-                      background: `linear-gradient(to right, rgba(0,240,255,0.55), ${ACCENT})`,
-                    }}
+      <section aria-label="Top stories audiobook" className="px-6 py-10 md:px-12">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <div className="coupon-edge p-2">
+              <div className="t-card t-border border p-6 md:p-8">
+                <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em]">
+                  <Scissors className="h-4 w-4" aria-hidden="true" />
+                  Clip and save: top 5 on the go
+                </p>
+                <p className="t-muted mt-2 max-w-2xl text-sm leading-relaxed">
+                  Five crosschecks back to back for the commute. Playback controls live in the bar below once you press play.
+                </p>
+                <div className="mt-6">
+                  <ListenAudiobook
+                    stories={stories}
+                    currentId={currentListenId}
+                    playing={listeningPlaying}
+                    onSelect={(id) => onListen && onListen(id)}
+                    onPlayAll={() => onListen && onListen(stories[0].id)}
                   />
                 </div>
-                <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-white/50">
-                  <span className="rounded-full border border-white/10 bg-black/40 px-3 py-1">{current.topic}</span>
-                  <span className="rounded-full border border-white/10 bg-black/40 px-3 py-1">{current.date}</span>
-                  <span className="rounded-full border border-white/10 bg-black/40 px-3 py-1">Sources linked in notes</span>
-                </div>
               </div>
             </div>
+          </Reveal>
+        </div>
+      </section>
 
-            <div className="border-t border-white/10 bg-black/50 lg:border-l lg:border-t-0">
-              <ul className="divide-y divide-white/10">
-                {episodes.map((episode) => {
-                  const active = episode.id === currentId
-                  const isPlayingThis = active && playing
-                  return (
-                    <li key={episode.id}>
-                      <button
-                        type="button"
-                        onClick={() => selectEpisode(episode.id)}
-                        aria-current={active ? 'true' : undefined}
-                        className={`group flex w-full items-center gap-4 p-5 text-left transition-colors ${
-                          active ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'
-                        }`}
-                      >
-                        <span
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                            active
-                              ? 'border-transparent bg-white text-black'
-                              : 'border-white/15 text-white group-hover:border-white/30'
-                          }`}
-                        >
-                          {isPlayingThis ? (
-                            <Pause className="h-4 w-4" />
-                          ) : (
-                            <Play className="ml-0.5 h-4 w-4" />
-                          )}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium text-white">
-                            {episode.title}
-                          </span>
-                          <span className="mt-1 block text-xs text-white/45">
-                            {episode.show} • {episode.duration} • {episode.date}
-                          </span>
-                        </span>
-                        {active && (
-                          <span
-                            className="h-1.5 w-1.5 shrink-0 rounded-full"
-                            style={{ backgroundColor: ACCENT }}
-                            aria-hidden="true"
-                          />
-                        )}
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
+      <section aria-label="Past episodes" className="px-6 pb-10 md:px-12">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <SectionHeader index="D" title="From the archive" blurb="Recent episodes. Sources listed in notes." />
+          </Reveal>
+          <div className="t-border mt-8 grid grid-cols-1 gap-0 border sm:grid-cols-2 lg:grid-cols-4">
+            {episodes.map((ep, i) => (
+              <article
+                key={ep.id}
+                className={`p-6 ${i > 0 ? 't-border border-t sm:border-l sm:border-t-0' : ''} ${
+                  i === 2 ? 'max-lg:border-t max-lg:sm:border-l-0' : ''
+                } ${i === 3 ? 'max-lg:border-t max-lg:sm:border-l' : ''}`}
+              >
+                <p className="kicker">
+                  {ep.date} · {ep.topic}
+                </p>
+                <h3 className="headline-serif mt-2 text-lg leading-snug">
+                  <button type="button" onClick={scrollToDesk} className="text-left">
+                    {ep.title}
+                  </button>
+                </h3>
+                <p className="t-faint mt-2 text-xs">
+                  {ep.show} · {ep.duration}
+                </p>
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
-      <Reveal className="px-6 py-12 md:px-12">
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8">
-            <h2 className="font-display text-2xl font-extrabold tracking-tight text-white">WeAware Daily Brief</h2>
-            <p className="mt-2 text-sm leading-relaxed text-white/60">
-              Weekday mornings. Three stories, consensus scores read aloud, and the one
-              flagged claim you should not repeat at lunch.
-            </p>
-            <p className="mt-4 text-xs uppercase tracking-[0.14em] text-white/40">New episodes weekday mornings</p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8">
-            <h2 className="font-display text-2xl font-extrabold tracking-tight text-white">The Disagreement</h2>
-            <p className="mt-2 text-sm leading-relaxed text-white/60">
-              Weekly. One contested story, all source stances on the table, and what would
-              need to change for consensus to move.
-            </p>
-            <p className="mt-4 text-xs uppercase tracking-[0.14em] text-white/40">New episodes every Thursday</p>
-          </div>
+      <section aria-label="Follow" className="px-6 pb-14 md:px-12">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <FollowFolio onPlayLatest={scrollToDesk} />
+          </Reveal>
         </div>
-      </Reveal>
+      </section>
     </div>
   )
 }

@@ -1,65 +1,54 @@
 import { Headphones, Pause, Play } from 'lucide-react'
 import { listenMinsFor } from './ListenBar.jsx'
 
-const ACCENT = '#00F0FF'
-
 export default function ListenAudiobook({ stories, currentId, playing, onSelect, onPlayAll }) {
-  const totalMins = stories.slice(0, 5).reduce((sum, s) => sum + listenMinsFor(s), 0)
+  const list = Array.isArray(stories) ? stories.slice(0, 5) : []
+  const totalMins = list.reduce((sum, s) => sum + listenMinsFor(s), 0)
+
+  if (list.length === 0) {
+    return (
+      <div className="t-card t-border border p-8 text-center md:p-10">
+        <p className="kicker">Audiobook</p>
+        <h2 className="headline-serif mt-3 text-2xl">No stories to play yet.</h2>
+        <p className="t-muted font-body-serif mt-2 text-[15px] leading-relaxed">
+          New crosschecks land each morning. Browse the feed to find a story to hear.
+        </p>
+      </div>
+    )
+  }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]">
-      <div className="flex flex-wrap items-center gap-4 p-6 md:p-8">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-black">
+    <div className="t-card t-border border">
+      <div className="rule-thick" aria-hidden="true" />
+      <div className="flex flex-wrap items-center gap-4 px-6 pt-5 md:px-8">
+        <span className="t-btn-primary flex h-12 w-12 items-center justify-center rounded-full" aria-hidden="true">
           <Headphones className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: ACCENT }}>
-            Audiobook • Today’s news on the go
-          </p>
-          <h2 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-white">
-            Listen to the top 5, back to back
-          </h2>
-          <p className="mt-1 text-sm text-white/55">
-            {totalMins} min total • AI-read cross-checks • 15s skip • 1x–1.5x speed • mock audio
-          </p>
+          <p className="kicker">Audiobook · Today on the go</p>
+          <h2 className="headline-serif mt-1.5 text-2xl leading-tight md:text-[1.7rem]">Hear the top 5, back to back</h2>
+          <p className="byline mt-1.5">{totalMins} min total · AI read crosschecks · Mock audio</p>
         </div>
-        <button
-          type="button"
-          onClick={onPlayAll}
-          className="rounded-full bg-white px-6 py-2.5 text-sm font-medium text-black hover:bg-white/85"
-        >
+        <button type="button" onClick={onPlayAll} className="t-btn-primary px-6 py-2.5 text-sm font-medium">
           Play all
         </button>
       </div>
-      <ul className="divide-y divide-white/10 border-t border-white/10">
-        {stories.slice(0, 5).map((story, idx) => {
+      <ul className="t-border mt-5 divide-y border-t">
+        {list.map((story, idx) => {
           const active = story.id === currentId
           const isPlayingThis = active && playing
           return (
             <li key={story.id}>
-              <button
-                type="button"
-                onClick={() => onSelect(story.id)}
-                aria-current={active ? 'true' : undefined}
-                className={`flex w-full items-center gap-4 px-6 py-4 text-left transition-colors md:px-8 ${
-                  active ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'
-                }`}
-              >
-                <span className="w-6 shrink-0 font-mono text-xs text-white/35">{String(idx + 1).padStart(2, '0')}</span>
-                <span
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border ${
-                    active ? 'border-transparent bg-white text-black' : 'border-white/15 text-white'
-                  }`}
-                >
+              <button type="button" onClick={() => onSelect(story.id)} aria-current={active ? 'true' : undefined} className="flex w-full items-center gap-4 px-6 py-4 text-left md:px-8">
+                <span className="t-faint w-6 shrink-0 font-mono text-xs">{String(idx + 1).padStart(2, '0')}</span>
+                <span className={active ? 't-btn-primary flex h-10 w-10 shrink-0 items-center justify-center rounded-full' : 't-btn-outline flex h-10 w-10 shrink-0 items-center justify-center rounded-full'}>
                   {isPlayingThis ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-white">{story.title}</span>
-                  <span className="mt-0.5 block text-xs text-white/45">
-                    {story.topic} • {listenMinsFor(story)} min listen • {story.consensus}% consensus
-                  </span>
+                  <span className="block truncate text-sm font-medium">{story.title}</span>
+                  <span className="t-muted mt-0.5 block text-xs">{story.topic} · {listenMinsFor(story)} min listen · {story.consensus}% consensus</span>
                 </span>
-                {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: ACCENT }} />}
+                {active && <span className="signal-dot h-1.5 w-1.5 shrink-0 rounded-full" aria-hidden="true" />}
               </button>
             </li>
           )

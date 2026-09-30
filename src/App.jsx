@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { Moon, Sun } from 'lucide-react'
 import { stories } from './data/stories.js'
+import { ThemeProvider, useTheme } from './theme.js'
 import Topbar from './components/Topbar.jsx'
 import FeedGrid from './components/FeedGrid.jsx'
 import Reader from './components/Reader.jsx'
@@ -10,9 +12,6 @@ import SiteFooter from './components/SiteFooter.jsx'
 import ListenBar from './components/ListenBar.jsx'
 import ShareSheet from './components/ShareSheet.jsx'
 
-const ACCENT = '#00F0FF'
-const CTA_GRADIENT = 'linear-gradient(to bottom, #2B2B2B, #101010)'
-const CTA_GLOW = '0 0 24px rgba(0, 240, 255, 0.18)'
 const NAV_LINKS = [
   { id: 'feed', label: 'Feed' },
   { id: 'newsletters', label: 'Newsletters' },
@@ -20,13 +19,29 @@ const NAV_LINKS = [
   { id: 'about', label: 'About' },
 ]
 
+function ThemeToggle() {
+  const { theme, toggle } = useTheme()
+  const dark = theme === 'dark'
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+      aria-pressed={dark}
+      className="icon-btn"
+    >
+      {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </button>
+  )
+}
+
 function Hero({ onNavigate }) {
   const [joined, setJoined] = useState(false)
 
   return (
-    <section className="relative min-h-screen w-full overflow-hidden bg-black">
+    <section className="t-bg relative min-h-screen w-full overflow-hidden">
       <video
-        className="hero-media absolute inset-0 h-full w-full object-cover"
+        className="hero-media absolute inset-0 h-full w-full object-cover opacity-40"
         autoPlay
         loop
         muted
@@ -35,113 +50,88 @@ function Hero({ onNavigate }) {
         poster="/weaware-poster.jpg"
         src="/weaware-bg.mp4"
       />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-gradient-to-b from-black/60 via-black/20 to-transparent" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[78%] bg-gradient-to-t from-black/80 via-black/35 to-transparent" />
 
-      <div className="relative z-10 flex min-h-screen flex-col">
-        <nav aria-label="Primary" className="flex flex-wrap items-center justify-between gap-3 px-6 py-5 md:px-12 md:py-6">
-          <button type="button" onClick={() => onNavigate('hero')} aria-label="WeAware home">
-            <img
-              src="/weaware-logo.png"
-              alt="WeAware — globe with WEAWARE banner"
-              className="h-10 w-auto drop-shadow-[0_2px_12px_rgba(0,0,0,0.55)] md:h-12"
-            />
+      <div className="relative z-10 flex min-h-screen flex-col px-4 pt-3 md:px-8">
+        <nav aria-label="Primary" className="glass-nav mx-auto flex w-full max-w-4xl items-center gap-4 rounded-2xl px-4 py-2.5">
+          <button type="button" onClick={() => onNavigate('hero')} aria-label="WeAware home" className="flex shrink-0 items-center gap-2">
+            <img src="/weaware-logo.png" alt="WeAware — globe with WEAWARE banner" className="h-6 w-auto" />
+            <span className="font-display text-[15px] font-bold tracking-tight">WeAware</span>
           </button>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex flex-wrap items-center gap-1 rounded-full border border-white/15 bg-black/35 px-1.5 py-1.5 shadow-lg backdrop-blur-xl">
-              {NAV_LINKS.map((link) => (
-                <button
-                  key={link.id}
-                  type="button"
-                  onClick={() => onNavigate(link.id)}
-                  className="nav-3d rounded-full px-5 py-1.5 text-[15px] text-white/85 transition-colors hover:bg-white/15 hover:text-white hover:underline hover:underline-offset-4"
-                  style={{ textDecorationColor: ACCENT }}
-                >
-                  {link.label}
-                </button>
-              ))}
-            </div>
-            <a
-              href="#waitlist"
-              className="nav-3d flex items-center self-stretch rounded-full border px-5 py-2 text-[15px] text-white transition-opacity hover:opacity-90"
-              style={{
-                background: CTA_GRADIENT,
-                borderColor: `${ACCENT}4D`,
-                boxShadow: CTA_GLOW,
-              }}
-            >
+          <div className="hidden items-center gap-5 md:flex">
+            {NAV_LINKS.map((link) => (
+              <button
+                key={link.id}
+                type="button"
+                onClick={() => onNavigate(link.id)}
+                className="nav-link"
+              >
+                {link.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-4 md:hidden">
+            {NAV_LINKS.slice(0, 3).map((link) => (
+              <button
+                key={link.id}
+                type="button"
+                onClick={() => onNavigate(link.id)}
+                className="nav-link"
+              >
+                {link.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="ml-auto flex items-center gap-2">
+            <a href="#waitlist" className="t-btn-primary rounded-full px-4 py-1.5 text-[13px] font-medium">
               Join waitlist
             </a>
+            <ThemeToggle />
           </div>
         </nav>
 
-        <main className="perspective-stage mt-auto flex flex-col justify-end gap-8 px-6 pb-14 md:px-12 md:pb-16">
+        <main className="mt-auto flex flex-col justify-end gap-8 px-6 pb-14 md:px-12 md:pb-16">
           <div className="max-w-3xl">
-            <div className="hero-rise mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/35 px-3.5 py-1.5 backdrop-blur-xl" style={{ '--i': 0 }}>
-              <span className="signal-dot h-1.5 w-1.5 rounded-full" style={{ backgroundColor: ACCENT }} />
-              <span className="eyebrow-kanit text-[12px] text-white/80">
-                Cross-checked news, with sources shown
-              </span>
+            <div className="hero-rise glass-nav mb-5 inline-flex items-center gap-2 rounded-full px-3.5 py-1.5" style={{ '--i': 0 }}>
+              <span className="signal-dot h-1.5 w-1.5 rounded-full" />
+              <span className="eyebrow-kanit text-[12px]">Cross-checked news, with sources shown</span>
             </div>
-            <h1
-              className="hero-rise font-display text-6xl font-extrabold leading-[0.98] tracking-tight text-white md:text-7xl lg:text-[5.4rem]"
-              style={{ '--i': 1, textShadow: '0 2px 24px rgba(0,0,0,0.5)' }}
-            >
-              <span className="display-3d display-3d-gradient">
-                News, cross-checked by AI agents, not ranked for outrage.
-              </span>
+            <h1 className="hero-rise font-display text-6xl font-extrabold leading-[0.98] tracking-tight md:text-7xl lg:text-[5.4rem]" style={{ '--i': 1 }}>
+              News, cross-checked by AI agents, not ranked for outrage.
             </h1>
-            <p
-              className="hero-rise mt-4 font-display text-lg font-medium text-white/80 md:text-xl"
-              style={{ '--i': 2, textShadow: '0 1px 12px rgba(0,0,0,0.5)' }}
-            >
-              WeAware cross-references every source, flags disagreement instead
-              of hiding it, and always links back to the original reporting.
+            <p className="hero-rise t-muted mt-4 font-display text-lg font-medium md:text-xl" style={{ '--i': 2 }}>
+              WeAware cross-references every source, flags disagreement instead of hiding it, and always links back
+              to the original reporting.
             </p>
             {joined ? (
-              <p
-                id="waitlist"
-                role="status"
-                className="hero-rise mt-8 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/45 px-5 py-3 text-sm text-white backdrop-blur-xl"
-                style={{ '--i': 3 }}
-              >
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: ACCENT }} />
+              <p id="waitlist" role="status" className="hero-rise glass-nav mt-8 inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm" style={{ '--i': 3 }}>
+                <span className="signal-dot h-1.5 w-1.5 rounded-full" />
                 You are on the waitlist. Watch your inbox for early access.
               </p>
             ) : (
-            <form
-              id="waitlist"
-              onSubmit={(e) => {
-                e.preventDefault()
-                setJoined(true)
-              }}
-              className="hero-rise mt-8 inline-flex max-w-full flex-col gap-2 rounded-2xl bg-white p-1.5 shadow-2xl sm:flex-row sm:items-center sm:rounded-full"
-              style={{ '--i': 3 }}
-            >
-              <label htmlFor="hero-email" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="hero-email"
-                type="email"
-                required
-                placeholder="Get early access"
-                aria-label="Email address"
-                className="w-full rounded-xl bg-transparent px-4 py-2 text-sm text-gray-900 outline-none placeholder-gray-400 sm:w-64 sm:rounded-full"
-              />
-              <button
-                type="submit"
-                className="rounded-xl border px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:rounded-full"
-                style={{
-                  background: CTA_GRADIENT,
-                  borderColor: `${ACCENT}4D`,
-                  boxShadow: CTA_GLOW,
+              <form
+                id="waitlist"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  setJoined(true)
                 }}
+                className="hero-rise glass-nav mt-8 inline-flex max-w-full flex-col gap-2 rounded-2xl p-1.5 sm:flex-row sm:items-center sm:rounded-full"
+                style={{ '--i': 3 }}
               >
-                Join waitlist
-              </button>
-            </form>
+                <label htmlFor="hero-email" className="sr-only">Email address</label>
+                <input
+                  id="hero-email"
+                  type="email"
+                  required
+                  placeholder="Get early access"
+                  aria-label="Email address"
+                  className="t-field w-full rounded-xl bg-transparent px-4 py-2 text-sm outline-none sm:w-64 sm:rounded-full"
+                />
+                <button type="submit" className="t-btn-primary rounded-xl px-6 py-2.5 text-sm font-medium sm:rounded-full">
+                  Join waitlist
+                </button>
+              </form>
             )}
           </div>
         </main>
@@ -150,7 +140,8 @@ function Hero({ onNavigate }) {
   )
 }
 
-export default function App() {
+function Shell() {
+  const { theme } = useTheme()
   const [view, setView] = useState('hero')
   const [topic, setTopic] = useState('All')
   const [query, setQuery] = useState('')
@@ -171,7 +162,11 @@ export default function App() {
   }
 
   if (view === 'hero') {
-    return <Hero onNavigate={navigate} />
+    return (
+      <div data-theme={theme} className="t-bg min-h-screen">
+        <Hero onNavigate={navigate} />
+      </div>
+    )
   }
 
   const q = query.trim().toLowerCase()
@@ -219,7 +214,7 @@ export default function App() {
   const shareStory = stories.find((s) => s.id === shareId) ?? null
 
   return (
-    <div className={`min-h-screen bg-black text-white ${listenStory ? 'pb-32' : ''}`}>
+    <div data-theme={theme} className={`t-bg min-h-screen ${listenStory ? 'pb-32' : ''}`}>
       <Topbar
         page={view}
         onNavigate={navigate}
@@ -280,5 +275,13 @@ export default function App() {
       ) : null}
       <ShareSheet story={shareStory} open={!!shareStory} onClose={() => setShareId(null)} />
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <Shell />
+    </ThemeProvider>
   )
 }
