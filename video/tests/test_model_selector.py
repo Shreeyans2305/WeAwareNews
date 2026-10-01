@@ -204,3 +204,32 @@ def test_pro_selector_flash_also_unavailable():
             allow_preview=False,
         )
 
+
+def test_price_effective_until_gemini_38_flash():
+    """Verify that gemini-3.8-flash uses promotional pricing through Dec 31, 2026 and transitions on Jan 1, 2027."""
+    c = next(cand for cand in DEFAULT_CANDIDATES["flash"] if cand.model_id == "gemini-3.8-flash")
+    assert c.price_effective_until == date(2027, 1, 1)
+
+    # 1. On Dec 31, 2026 (last day of promo): $0.75 in / $3.75 out
+    today_promo = date(2026, 12, 31)
+    cost_promo = calculate_estimated_cost(c, "flash", today=today_promo)
+    # (10k / 1M) * 0.75 + (3k / 1M) * 3.75 = 0.0075 + 0.01125 = 0.01875
+    assert round(cost_promo, 5) == 0.01875
+
+    # 2. On Jan 1, 2027 (promotional pricing expires): $1.50 in / $6.00 out
+    today_post_promo = date(2027, 1, 1)
+    cost_post = calculate_estimated_cost(c, "flash", today=today_post_promo)
+    # (10k / 1M) * 1.50 + (3k / 1M) * 6.00 = 0.015 + 0.018 = 0.033
+    assert round(cost_post, 5) == 0.033
+
+    # 3. In select_model: on Dec 31, 2026, estimated cost matches promo price
+    res_promo = select_model("flash", today=today_promo, allow_preview=False)
+    assert res_promo.model_id == "gemini-3.8-flash"
+    assert round(res_promo.estimated_cost_usd, 5) == 0.01875
+
+    # On Jan 1, 2027, estimated cost matches post-promo price
+    res_post = select_model("flash", today=today_post_promo, allow_preview=False)
+    assert res_post.model_id == "gemini-3.8-flash"
+    assert round(res_post.estimated_cost_usd, 5) == 0.033
+
+

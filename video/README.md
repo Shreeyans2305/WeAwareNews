@@ -73,20 +73,26 @@ gcloud services enable \
 
 ## 3. Vertex AI Model Selection & Quotas
 
-### Verified Active Model IDs & Retirement Dates
+### Official Model Retirement Calendar & Review Milestones
 
-| Role | Active Model ID | Location | Lifecycle Status | Pricing / 1M Tokens (or s) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Video Generation (Fast 720p Tier)** | `veo-3.1-fast-generate-001` | `us-central1` | GA (Active) | $0.10 / second (with audio) |
-| **Video Generation (Standard 720p Tier)** | `veo-3.1-generate-001` | `us-central1` | GA (Active) | $0.20 / second (with audio) |
-| **Story Picker (Candidate 1)** | `gemini-2.5-flash` | `us-central1` | GA (Discontinues 2026-10-20) | $0.10 in, $0.40 out |
-| **Story Picker (Candidate 2 - Future)** | `gemini-3.5-flash` | `global` | GA (Active) | $0.10 in, $0.40 out |
-| **Story Picker (Candidate 3 - Future)** | `gemini-3.8-flash` | `global` | GA (Active) | $0.10 in, $0.40 out |
-| **Standards & Fact Editor (Candidate 1)** | `gemini-2.5-pro` | `us-central1` | GA (Discontinues 2026-10-20) | $1.25 in, $5.00 out |
-| **Standards & Fact Editor (Candidate 2 - Future)** | `gemini-3.1-pro-preview` | `global` | Preview (Active) | $1.25 in, $5.00 out |
-| **Anchor/Set Asset Generator** | `gemini-2.5-flash-image` | `us-central1` | GA (Discontinues 2027-03-15) | Pay-per-image |
+Sources:
+- Official Lifecycle Documentation: [Cloud Model Versions](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions)
+- Official Vertex AI Pricing: [Vertex AI Pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing)
 
-*Note: Plate regeneration after 2027-03-15 will use `gemini-3.1-flash-image`.*
+| Model ID | Endpoint Location | Status | Retirement / Cutoff Date | Switch / Review Date | Official Documentation Text Read | Source URL |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `gemini-2.5-flash` | `us-central1` | GA | **2026-10-20** | **2026-10-19** (Switch Date) | *"Discontinuation date: October 20, 2026"* | [Model Versions](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions) |
+| `gemini-2.5-pro` | `us-central1` | GA | **2026-10-20** | **2026-10-19** (Switch Date) | *"Discontinuation date: October 20, 2026"* | [Model Versions](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions) |
+| `gemini-3.8-flash` | `global` | GA | None announced *(conservative: 2028-01-01)* | **2027-01-01** (Promo Cutoff) | *"Promotional pricing available until December 31, 2026"* | [Vertex Pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing) |
+| `gemini-3.5-flash` | `global` | GA | **2027-05-19 or later** | **2027-05-18** (Switch Date) | *"Discontinuation date: May 19, 2027 or later"* | [Model Versions](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions) |
+| `gemini-3.1-pro-preview` | `global` | Preview | **2027-05-28 or later** | Excluded | *"Discontinuation date: May 28, 2027 or later"* (Preview model; excluded while `ALLOW_PREVIEW_MODELS=false`) | [Model Versions](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions) |
+| `veo-3.1-fast-generate-001` | `us-central1` | GA | **2026-11-17 or later** | **2026-11-03** (Veo Review Date) | *"Discontinuation date: November 17, 2026 or later"* | [Model Versions](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions) |
+| `veo-3.1-generate-001` | `us-central1` | GA | **2026-11-17 or later** | **2026-11-03** (Veo Review Date) | *"Discontinuation date: November 17, 2026 or later"* | [Model Versions](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions) |
+| `gemini-2.5-flash-image` | `us-central1` | GA | **2027-03-15** | **2027-03-01** (Review Date) | *"Discontinuation date: March 15, 2027"* | [Model Versions](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions) |
+
+> [!IMPORTANT]
+> **Veo Baseline Policy**: Baseline video generation is strictly locked to `veo-3.1-fast-generate-001` at 720p. The pipeline issues a lifecycle warning starting on the **Veo Review Date (2026-11-03)**; upgrading or switching Veo models requires explicit human review and approval.
+> **Pro Role GA Policy**: On and after **2026-10-19**, no GA Pro models remain; the pipeline automatically falls back to the best available GA Flash model (`gemini-3.8-flash`), running the editor safety audit with stricter claim-by-claim verification and UI review flagging.
 
 ### Quotas to Request in Google Cloud Console
 Under **IAM & Admin -> Quotas & System Limits** for `us-central1`:

@@ -24,6 +24,9 @@ class ModelCandidate:
     is_preview: bool
     order_rank: int  # Higher number = newer model generation
     source_url: str = "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions"
+    price_effective_until: Optional[date] = None  # Date when current / promotional pricing expires
+    next_price_input_per_1m: Optional[float] = None  # USD per 1M input tokens after price_effective_until
+    next_price_output_per_1m: Optional[float] = None  # USD per 1M output tokens after price_effective_until
 
 
 # Typical token counts per run per role for cost estimation
@@ -52,7 +55,7 @@ DEFAULT_CANDIDATES: Dict[str, List[ModelCandidate]] = {
             source_url="https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions",
         ),
         # 2. Gemini 3.8 Flash (GA, promotional pricing through Dec 31, 2026)
-        # Pricing: $0.75 in / $3.75 out per 1M tokens (Table 0)
+        # Pricing: $0.75 in / $3.75 out per 1M tokens through Dec 31, 2026; $1.50 in / $6.00 out from Jan 1, 2027
         # Retirement: "No retirement date announced" (set conservatively to 2028-01-01)
         ModelCandidate(
             model_id="gemini-3.8-flash",
@@ -64,6 +67,9 @@ DEFAULT_CANDIDATES: Dict[str, List[ModelCandidate]] = {
             is_preview=False,
             order_rank=3,
             source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
+            price_effective_until=date(2027, 1, 1),
+            next_price_input_per_1m=1.50,
+            next_price_output_per_1m=6.00,
         ),
         # 3. Gemini 3.5 Flash (GA, global endpoint)
         # Pricing: $1.50 in / $9.00 out per 1M tokens (Table 0)
@@ -122,13 +128,23 @@ class SelectionResult:
     candidate: ModelCandidate
 
 
-def calculate_estimated_cost(candidate: ModelCandidate, role: str) -> float:
-    """Calculates estimated per-run cost in USD based on typical token counts."""
-    if candidate.price_input_per_1m is None or candidate.price_output_per_1m is None:
+def calculate_estimated_cost(candidate: ModelCandidate, role: str, today: Optional[date] = None) -> float:
+    """Calculates estimated per-run cost in USD based on typical token counts and date-effective pricing."""
+    price_in = candidate.price_input_per_1m
+    price_out = candidate.price_output_per_1m
+
+    # Date-aware pricing transition: if today >= price_effective_until, use next prices
+    if today and candidate.price_effective_until and today >= candidate.price_effective_until:
+        if candidate.next_price_input_per_1m is not None:
+            price_in = candidate.next_price_input_per_1m
+        if candidate.next_price_output_per_1m is not None:
+            price_out = candidate.next_price_output_per_1m
+
+    if price_in is None or price_out is None:
         return float("inf")  # Unknown pricing treated as infinite / not cheaper
     tokens = TYPICAL_TOKENS.get(role, {"input": 10_000, "output": 3_000})
-    input_cost = (tokens["input"] / 1_000_000.0) * candidate.price_input_per_1m
-    output_cost = (tokens["output"] / 1_000_000.0) * candidate.price_output_per_1m
+    input_cost = (tokens["input"] / 1_000_000.0) * price_in
+    output_cost = (tokens["output"] / 1_000_000.0) * price_out
     return input_cost + output_cost
 
 
@@ -183,7 +199,7 @@ def select_model(
                 logger.warning(f"Candidate {c.model_id} ({c.location}) failed availability probe. Dropping.")
                 continue
 
-        cost = calculate_estimated_cost(c, role)
+        cost = calculate_estimated_cost(c, role, today=today)
         surviving.append((c, cost))
 
     if not surviving:
@@ -209,7 +225,7 @@ def select_model(
                 if probe_func is not None and not probe_func(fc):
                     logger.warning(f"Flash fallback candidate {fc.model_id} ({fc.location}) failed probe. Dropping.")
                     continue
-                f_cost = calculate_estimated_cost(fc, "pro")
+                f_cost = calculate_estimated_cost(fc, "pro", today=today)
                 surviving_flash.append((fc, f_cost))
 
             if not surviving_flash:
