@@ -21,6 +21,7 @@ from typing import Optional, List, Dict, Any
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from video.config.settings import settings
+from video.config.model_selector import select_model
 from video.pipeline.picker import pick_story
 from video.pipeline.scripter import generate_script, assemble_veo_prompt
 from video.pipeline.editor import edit_script
@@ -203,8 +204,19 @@ def run_pipeline(
     if tier:
         settings.veo_model_tier = tier
 
+    # Model Selection
+    flash_selection = select_model("flash")
+    pro_selection = select_model("pro")
+    is_pro_fallback = (pro_selection.reason == "pro_unavailable_flash_fallback")
+
     logger.info("=" * 65)
     logger.info(f"STARTING WEAWARE LATE NIGHT PIPELINE (dry_run={dry_run}, tier={settings.veo_model_tier})")
+    logger.info(f"Selected Models: Flash={flash_selection.model_id} ({flash_selection.reason}), Pro={pro_selection.model_id} ({pro_selection.reason})")
+    if is_pro_fallback:
+        logger.warning(
+            "STARTUP LOG: pro_unavailable_flash_fallback - No GA candidate remains for 'pro'. "
+            f"Editor and pro-role calls falling back to Flash model {pro_selection.model_id} ({pro_selection.location})."
+        )
     logger.info("=" * 65)
 
     anchors_config = load_anchors_config()
@@ -226,14 +238,14 @@ def run_pipeline(
         candidates = matching
 
     # 2. Story Selection
-    chosen_candidate, picker_decision, fallbacks = pick_story(candidates)
+    chosen_candidate, picker_decision, fallbacks = pick_story(candidates, model=flash_selection.model_id)
     logger.info(f"Selected Candidate: {chosen_candidate.headline} (Story ID: {chosen_candidate.story_id})")
 
     # 3. Dry-run Mode check
     if dry_run:
         logger.info("\n[DRY RUN MODE] Testing script generation and editor pass against chosen candidate...")
-        script = generate_script(chosen_candidate, anchors_config=anchors_config)
-        editor_decision = edit_script(chosen_candidate, script)
+        script = generate_script(chosen_candidate, anchors_config=anchors_config, model=pro_selection.model_id)
+        editor_decision = edit_script(chosen_candidate, script, model=pro_selection.model_id, is_fallback=is_pro_fallback)
         logger.info(f"Generated Headline: {script.headline}")
         logger.info(f"Clips Plan Count: {len(script.clips)}")
         logger.info(f"Editor Pass Verdict: {'PASSED' if editor_decision.passed else 'FAILED'}")
@@ -262,11 +274,11 @@ def run_pipeline(
     # 5. Script & Editor Loop with fallback
     for attempt in range(settings.max_editor_fallbacks + 1):
         update_status_via_api(api_url, api_key, run_id, "claimed", "scripting")
-        logger.info(f"Writing satirical script for {current_candidate.headline}...")
-        script = generate_script(current_candidate, anchors_config=anchors_config)
+        logger.info(f"Writing satirical script for {current_candidate.headline} (model={pro_selection.model_id})...")
+        script = generate_script(current_candidate, anchors_config=anchors_config, model=pro_selection.model_id)
 
-        logger.info("Conducting Standards & Practices Editor pass...")
-        editor_decision = edit_script(current_candidate, script)
+        logger.info(f"Conducting Standards & Practices Editor pass (model={pro_selection.model_id}, fallback={is_pro_fallback})...")
+        editor_decision = edit_script(current_candidate, script, model=pro_selection.model_id, is_fallback=is_pro_fallback)
 
         if editor_decision.passed:
             logger.info("✓ Script passed editor review.")
@@ -347,6 +359,12 @@ def run_pipeline(
         "estimated_cost_usd": veo_client.total_cost_usd,
         "veo_seconds_used": veo_client.total_veo_seconds_spent,
         "transcript_checks": transcript_checks,
+        "pro_model": pro_selection.model_id,
+        "flash_model": flash_selection.model_id,
+        "pro_selection_reason": pro_selection.reason,
+        "pro_unavailable_flash_fallback": is_pro_fallback,
+        "editor_fallback_active": is_pro_fallback,
+        **({"model_fallback_reason": "pro_unavailable_flash_fallback"} if is_pro_fallback else {}),
     }
 
     artifacts = process_video_and_metadata(

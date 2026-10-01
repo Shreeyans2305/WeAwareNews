@@ -488,6 +488,33 @@ def get_video_review_page(
             btn_color = "#10b981" if action == "approve" else "#ef4444"
             btn_text = "Confirm Approval" if action == "approve" else "Confirm Rejection"
 
+            is_flash_fallback = (
+                metadata.get("pro_selection_reason") == "pro_unavailable_flash_fallback"
+                or metadata.get("model_fallback_reason") == "pro_unavailable_flash_fallback"
+                or metadata.get("pro_unavailable_flash_fallback") is True
+                or metadata.get("editor_fallback_active") is True
+            )
+
+            fallback_badge_html = ""
+            if is_flash_fallback:
+                fallback_badge_html = """
+                <div style='background:#451a03;border:1px solid #f59e0b;color:#fef3c7;border-radius:8px;padding:12px;margin-bottom:16px;font-size:0.85rem;'>
+                    <div style='display:flex;align-items:center;gap:8px;'>
+                        <span style='background:#f59e0b;color:#000;font-size:0.75rem;font-weight:bold;padding:2px 6px;border-radius:4px;'>editor: flash fallback</span>
+                        <span style='font-family:monospace;font-size:0.8rem;color:#fcd34d;'>pro_unavailable_flash_fallback</span>
+                    </div>
+                    <div style='margin-top:6px;color:#fde68a;'>
+                        ⚠️ <b>Notice:</b> Pro model is unavailable; Editor audit ran with stricter claim-by-claim Flash fallback. Please inspect the claims checklist extra carefully.
+                    </div>
+                </div>
+                """
+
+            claims_checklist_html = (
+                "<label style='color:#f87171;font-weight:bold;'><input type=\"checkbox\"> ⚠️ <b>[editor: flash fallback]</b> Factual claims match corroborated source articles (inspect claim-by-claim checklist carefully)</label>"
+                if is_flash_fallback
+                else "<label><input type=\"checkbox\" checked> Factual claims match corroborated source articles</label>"
+            )
+
             html = f"""
             <!DOCTYPE html>
             <html>
@@ -513,13 +540,15 @@ def get_video_review_page(
                     <p><b>Headline:</b> {headline}</p>
                     <div class="caption"><b>Caption:</b><br>{caption}</div>
                     
+                    {fallback_badge_html}
+
                     {transcript_html}
 
                     <div class="checklist">
                         <h4>Pre-Publication QA Checklist</h4>
                         <label><input type="checkbox" checked> Face & voice consistent across all clips</label>
                         <label><input type="checkbox" checked> Dialogue accurately matches script</label>
-                        <label><input type="checkbox" checked> Factual claims match corroborated source articles</label>
+                        {claims_checklist_html}
                         <label><input type="checkbox" checked> Subtitles & lower-third stay within mobile-safe margins</label>
                     </div>
 

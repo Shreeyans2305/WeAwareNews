@@ -39,14 +39,43 @@ AUDIT CRITERIA:
    Return valid JSON strictly matching the requested schema.
 """
 
+_EDITOR_SYSTEM_PROMPT_STRICT = """You are the Standards & Practices Senior Editor for "WeAware Late Night".
+Your job is to conduct a strict, adversarial editorial audit of a proposed 4-clip comedy script against the underlying news source texts.
+NOTE: Strict fallback audit mode is ACTIVE. Because a fallback model is running the fact-check safety gate, you must perform an explicit claim-by-claim check against the source text.
+
+AUDIT CRITERIA (STRICT CLAIM-BY-CLAIM FALLBACK MODE):
+1. EXPLICIT CLAIM-BY-CLAIM CHECK AGAINST SOURCE TEXT:
+   - Check every single claim in the `claims` list and every assertion in the dialogue individually against the provided source articles.
+   - Every factual assertion must have direct, verifiable textual support in the source texts.
+   - If any claim, statistic, quote, name, or detail lacks explicit corroboration in the source text, or extrapolates beyond the reported facts, you MUST set `factual_distortion_flag = True` and `passed = False`.
+   - List each failed or uncorroborated claim specifically in `flags` and explain the exact issue in `critique_reason`.
+2. TONE & TARGET:
+   - Jokes must punch at ideas, institutions, policies, corporations, and situations.
+   - NEVER attack or mock private individuals or protected demographic groups.
+3. OUTPUT FORMAT:
+   Return valid JSON strictly matching the requested schema.
+"""
+
 
 def edit_script(
     candidate: VideoCandidateResponse,
     script: ScriptOutput,
     client: Optional[genai.Client] = None,
     model: Optional[str] = None,
+    is_fallback: bool = False,
 ) -> EditorDecision:
-    target_model = model or settings.gemini_flash_model
+    if model is None:
+        try:
+            from video.config.model_selector import select_model
+            pro_sel = select_model("pro")
+            target_model = pro_sel.model_id
+            if pro_sel.reason == "pro_unavailable_flash_fallback":
+                is_fallback = True
+        except Exception:
+            target_model = settings.gemini_pro_model
+    else:
+        target_model = model
+
     if client is None:
         client = genai.Client(
             vertexai=True,
@@ -55,24 +84,37 @@ def edit_script(
         )
 
     sources_summary = "\n\n".join([
-        f"[{a.source_name}] ({a.url}):\n{a.excerpt}"
+        f"[{a.source_name}] ({a.url}) - Title: {a.title}\n{a.excerpt}"
         for a in candidate.articles
     ])
 
     script_summary = json.dumps(script.model_dump(), indent=2)
 
-    prompt = (
-        f"PROPOSED SCRIPT:\n{script_summary}\n\n"
-        f"VERIFIED SOURCE ARTICLES:\n{sources_summary}\n\n"
-        "Audit this script against the source texts. Verify factual support for all claims, "
-        "check satirical tone, and render your verdict."
-    )
+    if is_fallback:
+        prompt = (
+            f"PROPOSED SCRIPT:\n{script_summary}\n\n"
+            f"VERIFIED SOURCE ARTICLES:\n{sources_summary}\n\n"
+            "STRICT CLAIM-BY-CLAIM AUDIT INSTRUCTION: Conduct an explicit claim-by-claim verification of every dialogue line and claim against the source text. "
+            "Examine each asserted fact individually. If any detail is uncorroborated by the sources, reject immediately (passed=False, factual_distortion_flag=True). "
+            "Render your verdict."
+        )
+        system_instruction = _EDITOR_SYSTEM_PROMPT_STRICT
+        logger.info(f"Running Editor pass in STRICT CLAIM-BY-CLAIM FALLBACK mode with model={target_model}...")
+    else:
+        prompt = (
+            f"PROPOSED SCRIPT:\n{script_summary}\n\n"
+            f"VERIFIED SOURCE ARTICLES:\n{sources_summary}\n\n"
+            "Audit this script against the source texts. Verify factual support for all claims, "
+            "check satirical tone, and render your verdict."
+        )
+        system_instruction = _EDITOR_SYSTEM_PROMPT
+        logger.info(f"Running Editor pass with model={target_model}...")
 
     resp = client.models.generate_content(
         model=target_model,
         contents=prompt,
         config=types.GenerateContentConfig(
-            system_instruction=_EDITOR_SYSTEM_PROMPT,
+            system_instruction=system_instruction,
             response_mime_type="application/json",
             response_schema=EditorDecision,
             temperature=0.1,

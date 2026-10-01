@@ -140,6 +140,7 @@ def select_model(
     probe_func: Optional[Callable[[ModelCandidate], bool]] = None,
     excluded_models: Optional[List[str]] = None,
     is_runtime_fallback: bool = False,
+    fallback_candidates: Optional[List[ModelCandidate]] = None,
 ) -> SelectionResult:
     """
     Selects the optimal model candidate based on retirement dates, availability, and cost.
@@ -186,6 +187,55 @@ def select_model(
         surviving.append((c, cost))
 
     if not surviving:
+        # Fallback for 'pro' role to best available GA Flash when no GA Pro candidates remain
+        if role == "pro":
+            logger.warning("No GA candidate remains for role 'pro'. Evaluating fallback to GA Flash models...")
+            if fallback_candidates is None:
+                flash_cands = [c for c in candidates if c.role == "flash"]
+                if not flash_cands:
+                    flash_cands = DEFAULT_CANDIDATES.get("flash", [])
+            else:
+                flash_cands = fallback_candidates
+
+            surviving_flash: List[tuple[ModelCandidate, float]] = []
+            for fc in flash_cands:
+                if fc.model_id in excluded:
+                    continue
+                if fc.is_preview and not allow_preview:
+                    continue
+                f_switch_date = fc.retirement_date - timedelta(days=1)
+                if today >= f_switch_date:
+                    continue
+                if probe_func is not None and not probe_func(fc):
+                    logger.warning(f"Flash fallback candidate {fc.model_id} ({fc.location}) failed probe. Dropping.")
+                    continue
+                f_cost = calculate_estimated_cost(fc, "pro")
+                surviving_flash.append((fc, f_cost))
+
+            if not surviving_flash:
+                raise RuntimeError(
+                    f"No available Gemini models for role '{role}' and Flash fallback is also unavailable. "
+                    "All candidates retired, excluded, or failed probes."
+                )
+
+            # Rule 3: Choose cheapest by estimated per-run cost
+            surviving_flash.sort(key=lambda item: (item[1], -item[0].order_rank))
+            chosen, chosen_cost = surviving_flash[0]
+            days_until_switch = (chosen.retirement_date - timedelta(days=1) - today).days
+
+            logger.warning(
+                f"pro_unavailable_flash_fallback: Active for role 'pro'. Using best GA Flash model {chosen.model_id} ({chosen.location})."
+            )
+
+            return SelectionResult(
+                model_id=chosen.model_id,
+                location=chosen.location,
+                reason="pro_unavailable_flash_fallback",
+                days_until_switch=days_until_switch,
+                estimated_cost_usd=chosen_cost,
+                candidate=chosen,
+            )
+
         raise RuntimeError(
             f"No available Gemini models for role '{role}'. All candidates retired, excluded, or failed probes."
         )

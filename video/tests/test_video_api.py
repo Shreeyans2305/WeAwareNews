@@ -311,6 +311,35 @@ def test_review_get_confirm_page_only(client):
         assert "Confirm Approval" in resp.text
 
 
+def test_review_confirm_page_flash_fallback_badge(client):
+    run_id = str(uuid.uuid4())
+    token = generate_review_token(run_id, "approve", expires_in_seconds=3600)
+
+    mock_cursor = MagicMock()
+    mock_cursor.fetchone.return_value = {
+        "status": "ready_for_review",
+        "headline_snapshot": "Breaking Tech Satire",
+        "caption": "Check out this reel",
+        "video_gcs_uri": "gs://bucket/runs/1/final.mp4",
+        "thumbnail_gcs_uri": "gs://bucket/runs/1/thumb.jpg",
+        "run_metadata": {
+            "pro_selection_reason": "pro_unavailable_flash_fallback",
+            "editor_fallback_active": True,
+        },
+    }
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+    with patch("video.api.main.get_db_connection") as mock_get_db:
+        mock_get_db.return_value.__enter__.return_value = mock_conn
+
+        resp = client.get(f"/videos/review?token={token}&action=approve")
+        assert resp.status_code == 200
+        assert "editor: flash fallback" in resp.text
+        assert "pro_unavailable_flash_fallback" in resp.text
+        assert "[editor: flash fallback]" in resp.text
+
+
 def test_review_commit_single_use(client):
     run_id = str(uuid.uuid4())
     token = generate_review_token(run_id, "approve", expires_in_seconds=3600)
