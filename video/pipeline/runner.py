@@ -402,10 +402,17 @@ def run_pipeline(
     logger.info("✓ Dispatched review notifications via Pub/Sub and Webhook.")
     send_review_notifications(
         run_id=run_id,
+        story_id=current_candidate.story_id,
         headline=script.headline,
         video_url=final_video_gcs,
+        thumbnail_url=final_thumb_gcs,
         caption=script.caption,
+        hashtags=script.hashtags,
+        sources=source_names,
         estimated_cost=veo_client.total_cost_usd,
+        gemini_models_used={"flash": flash_selection.model_id, "pro": pro_selection.model_id},
+        veo_model=veo_client.model_name,
+        veo_resolution=settings.veo_resolution,
     )
 
     logger.info(f"✓ Pipeline run {run_id} completed successfully and is ready for review!")

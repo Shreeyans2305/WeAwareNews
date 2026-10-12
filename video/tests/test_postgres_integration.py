@@ -62,7 +62,7 @@ def setup_pg_database():
 def pg_client(setup_pg_database, monkeypatch):
     """TestClient wired directly to real local Postgres connection."""
     monkeypatch.setenv("DATABASE_URL", TEST_DB_URL)
-    monkeypatch.setenv("API_KEY", "test-api-key-123")
+    monkeypatch.setenv("VIDEO_API_KEY", "test-api-key-123")
     # Reset pool in video.api.db
     from video.api import db
     db._pool = None
@@ -220,7 +220,12 @@ def test_real_pg_publishing_timeout_auto_healing(pg_client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["run_id"] == run_id
-    assert data["caption"] == "Caption"
+    # Caption now has the AI disclosure appended (fallback since run_metadata is NULL in this row)
+    assert "Caption" in data["caption"]
+    # Verify disclosure is present (this is expected behavior per PHASE 1 requirement)
+    assert "AI-generated" in data["caption"] or "satire" in data["caption"].lower(), (
+        f"Expected disclosure in caption, got: {data['caption']}"
+    )
 
 
 def test_real_pg_url_overlap_dedupe(pg_client):

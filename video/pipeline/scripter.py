@@ -14,6 +14,7 @@ from google.genai import types
 
 from video.config.settings import settings
 from video.api.models import VideoCandidateResponse
+from video.pipeline.text_utils import clamp_caption
 
 logger = logging.getLogger("weaware-video.scripter")
 
@@ -132,6 +133,7 @@ def generate_script(
         )
 
         script = ScriptOutput.model_validate_json(resp.text)
+        script.caption = clamp_caption(script.caption, script.hashtags, script.satire_disclosure, 2200)
         if validate_and_trim_word_budget(script, settings.words_per_second):
             logger.info(f"Script generated successfully on attempt {attempt + 1}")
             return script
@@ -139,6 +141,7 @@ def generate_script(
             logger.info("Script slightly over word budget; requesting tightening...")
             user_prompt += "\n\nNOTE: Prior attempt exceeded word limits. Keep all clips under 20 words!"
 
+    script.caption = clamp_caption(script.caption, script.hashtags, script.satire_disclosure, 2200)
     return script
 
 

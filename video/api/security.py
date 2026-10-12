@@ -1,5 +1,16 @@
 """
 Security and HMAC Token utilities for WeAware Video API.
+
+API Key strategy:
+  - VIDEO_API_KEY: dedicated secret for this service (secret name: "video-api-key").
+    Used by the pipeline job and Make.com to call machine endpoints.
+  - API_KEY: the main app's shared secret, NOT reused here.
+  - VIDEO_HMAC_SECRET: HMAC signing key for single-use human review tokens.
+
+Authentication is enforced via constant-time comparison on ALL machine endpoints.
+The empty-key bypass has been intentionally removed: if VIDEO_API_KEY is not
+configured the service will refuse all authenticated requests with 401 rather
+than silently accepting them.
 """
 
 import hmac
@@ -13,18 +24,29 @@ _DEFAULT_SECRET = "weaware-video-hmac-dev-secret-38a1b2c"
 
 
 def get_hmac_secret() -> str:
-    return os.getenv("VIDEO_HMAC_SECRET") or os.getenv("API_KEY") or _DEFAULT_SECRET
+    return os.getenv("VIDEO_HMAC_SECRET") or _DEFAULT_SECRET
 
 
 def get_api_key() -> str:
-    return os.getenv("API_KEY", "")
+    """Returns the dedicated video-api-key (env: VIDEO_API_KEY)."""
+    return os.getenv("VIDEO_API_KEY", "")
 
 
 def verify_api_key(x_api_key: Optional[str] = Header(None)) -> bool:
+    """
+    Authenticate machine callers using X-Api-Key header.
+    Key is read from VIDEO_API_KEY env var (sourced from Secret Manager 'video-api-key').
+    Uses constant-time compare to prevent timing-oracle attacks.
+    Raises 401 if the key is absent from the environment (misconfiguration) or
+    if the caller provides a wrong/missing key.
+    """
     expected_key = get_api_key()
     if not expected_key:
-        # If not set in environment or testing without key, accept or check
-        return True
+        # video-api-key is not configured — refuse rather than silently bypass.
+        raise HTTPException(
+            status_code=401,
+            detail="API key not configured on server (VIDEO_API_KEY missing). Contact admin.",
+        )
     if not x_api_key:
         raise HTTPException(status_code=401, detail="Missing x-api-key header")
     if not hmac.compare_digest(x_api_key, expected_key):

@@ -31,7 +31,8 @@ from video.api.security import (
     verify_review_token,
     generate_review_token,
 )
-from video.api.db import get_db_connection
+from video.api.db import get_db_connection, get_dict_cursor
+from video.pipeline.text_utils import clamp_caption
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("weaware-video-api")
@@ -89,7 +90,17 @@ def truncate_excerpt(text: Optional[str], max_chars: int = 1200) -> str:
 
 
 @app.get("/health")
-def health_check():
+def health_check(check_db: bool = False):
+    if check_db:
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1;")
+                    cur.fetchone()
+            return {"status": "ok", "service": "weaware-video-api", "database": "connected"}
+        except Exception as e:
+            logger.error(f"Health DB check failed: {e}")
+            raise HTTPException(status_code=503, detail="Database unhealthy")
     return {"status": "ok", "service": "weaware-video-api"}
 
 
@@ -120,7 +131,7 @@ def get_video_candidates(
     Applies strict item quality filtering (no paywalls, no social, clean text >= 150 chars).
     """
     with get_db_connection() as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with get_dict_cursor(conn) as cur:
             # 1. Fetch recent video runs source_urls to deduplicate against
             cur.execute(
                 """
@@ -135,7 +146,10 @@ def get_video_candidates(
                 (dedupe_days,),
             )
             row = cur.fetchone()
-            recent_run_urls = {canonicalize_url(u) for u in (row[0] or []) if canonicalize_url(u)}
+            urls_list = None
+            if row:
+                urls_list = row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]
+            recent_run_urls = {canonicalize_url(u) for u in (urls_list or []) if canonicalize_url(u)}
 
             # 2. Query corroborated stories with no active video runs
             cur.execute(
@@ -429,7 +443,7 @@ def get_video_review_page(
         )
 
     with get_db_connection() as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with get_dict_cursor(conn) as cur:
             cur.execute(
                 "SELECT status, headline_snapshot, caption, video_gcs_uri, thumbnail_gcs_uri, run_metadata FROM video_runs WHERE run_id = %s",
                 (run_id,),
@@ -634,7 +648,7 @@ def get_next_approved_video(
     3. Returns signed video/thumbnail URLs and idempotency_key (or 204 No Content).
     """
     with get_db_connection() as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with get_dict_cursor(conn) as cur:
             # 1. Sweeper for expired publishing runs
             cur.execute(
                 """
@@ -663,7 +677,7 @@ def get_next_approved_video(
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
                 )
-                RETURNING run_id, story_id, video_gcs_uri, thumbnail_gcs_uri, caption, hashtags, idempotency_key
+                RETURNING run_id, story_id, video_gcs_uri, thumbnail_gcs_uri, caption, hashtags, idempotency_key, run_metadata
                 """,
                 (publish_timeout_min,),
             )
@@ -691,18 +705,44 @@ def get_next_approved_video(
                     blob = bucket.blob(parsed.path.lstrip("/"))
                     signed_video = blob.generate_signed_url(
                         version="v4",
-                        expiration=3600,
+                        expiration=7200,  # 2-hour validity as required
                         method="GET",
                     )
                 except Exception as e:
                     logger.warning(f"Could not generate signed URL: {e}. Returning raw URI.")
+
+            # Fetch satire_disclosure from run_metadata (set by the pipeline scripter).
+            # Appended here so Make.com's Instagram module always carries it in caption text,
+            # since Meta's AI-label field is not reliably supported via Make's module.
+            run_metadata_row = row.get("run_metadata") or {}
+            satire_disclosure = (
+                run_metadata_row.get("satire_disclosure")
+                or "\n\n\u26a0\ufe0f This video is AI-generated satire for entertainment purposes. Not real news."
+            )
+            raw_caption = row["caption"] or ""
+            hashtags_list = row["hashtags"] or []
+
+            # Ensure caption body + disclosure + hashtags strictly stays within 2,200 chars.
+            # Truncates caption body only, never disclosure or hashtags.
+            clamped_body = clamp_caption(
+                caption=raw_caption,
+                hashtags=hashtags_list,
+                satire_disclosure=satire_disclosure,
+                max_total_chars=2200,
+            )
+
+            # Avoid double-appending if the disclosure was already baked into the caption
+            if satire_disclosure.strip() not in clamped_body:
+                caption_with_disclosure = clamped_body + satire_disclosure
+            else:
+                caption_with_disclosure = clamped_body
 
             return NextApprovedVideoResponse(
                 run_id=str(row["run_id"]),
                 story_id=row["story_id"],
                 signed_video_url=signed_video,
                 signed_thumbnail_url=signed_thumb,
-                caption=row["caption"] or "",
+                caption=caption_with_disclosure,
                 hashtags=row["hashtags"] or [],
                 idempotency_key=str(row["idempotency_key"]),
             )

@@ -8,6 +8,7 @@ Unit tests for Video Pipeline Components:
 - Processor SRT generation
 """
 
+import sys
 import pytest
 from pathlib import Path
 
@@ -204,4 +205,126 @@ def test_check_clip_transcript_diff(tmp_path):
     assert res_mismatch["match_ratio"] < 100.0
     assert len(res_mismatch["mismatches"]) > 0
     assert "[-weaware late-]" in res_mismatch["diff"]
+
+
+# ---------------------------------------------------------------------------
+# 7. Caption Clamp & 2,200 Char Social Budget Tests
+# ---------------------------------------------------------------------------
+
+def test_clamp_caption_under_limit():
+    from video.pipeline.text_utils import clamp_caption, format_full_caption
+
+    caption = "A short punchy social caption about the absurd news cycle."
+    hashtags = ["#Satire", "#LateNight", "#WeAware"]
+    disclosure = "⚠️ AI-generated political satire grounded in verified multi-source news reporting."
+
+    clamped = clamp_caption(caption, hashtags, disclosure, max_total_chars=2200)
+    assert clamped == caption
+
+    full = format_full_caption(caption, hashtags, disclosure, max_total_chars=2200)
+    assert len(full) <= 2200
+    assert caption in full
+    assert disclosure in full
+    for tag in hashtags:
+        assert tag in full
+
+
+def test_clamp_caption_over_limit_truncates_body_only():
+    from video.pipeline.text_utils import clamp_caption, format_full_caption
+
+    # Generate a massive caption (3,000 chars)
+    long_caption = " ".join(["Breaking satirical coverage of today's events!"] * 100)
+    hashtags = ["#Satire", "#LateNight", "#WeAware", "#ComedyNews"]
+    disclosure = "⚠️ AI-generated political satire grounded in verified multi-source news reporting."
+
+    clamped_body = clamp_caption(long_caption, hashtags, disclosure, max_total_chars=2200)
+    # The body must be truncated with an ellipsis
+    assert clamped_body.endswith("...")
+    assert len(clamped_body) < len(long_caption)
+
+    # Combined full post must strictly not exceed 2200 chars
+    full_post = format_full_caption(long_caption, hashtags, disclosure, max_total_chars=2200)
+    assert len(full_post) <= 2200
+
+    # Critical rule: disclosure and hashtags must NEVER be truncated
+    assert disclosure in full_post
+    for tag in hashtags:
+        assert tag in full_post
+
+
+# ---------------------------------------------------------------------------
+# 8. Notifier & Runner Call Signature & Payload Keys Test
+# ---------------------------------------------------------------------------
+
+def test_send_review_notifications_runner_call_signature(monkeypatch):
+    from unittest.mock import MagicMock
+    from video.pipeline.notifier import send_review_notifications
+    import video.pipeline.notifier as notifier_mod
+
+    captured_payloads = []
+
+    def mock_send_webhook(webhook_url, payload, hmac_secret=None, max_retries=3, timeout_sec=10.0):
+        captured_payloads.append(payload)
+        return True
+
+    monkeypatch.setattr(notifier_mod, "get_secret_value", lambda name: "https://example.com/webhook" if "webhook" in name else "dummy-hmac")
+    monkeypatch.setattr(notifier_mod, "send_webhook_with_retry", mock_send_webhook)
+
+    # Mock pubsub
+    mock_pubsub = MagicMock()
+    mock_pubsub_client = MagicMock()
+    mock_future = MagicMock()
+    mock_future.result.return_value = "msg-12345"
+    mock_pubsub_client.publish.return_value = mock_future
+    mock_pubsub.PublisherClient.return_value = mock_pubsub_client
+    monkeypatch.setitem(sys.modules, "google.cloud.pubsub_v1", mock_pubsub)
+
+    # Call send_review_notifications EXACTLY with the parameters runner.py passes
+    result = send_review_notifications(
+        run_id="c0a80101-0000-0000-0000-000000000001",
+        story_id="test-story-id-456",
+        headline="Astronomers Discover Asteroid Mining Rush",
+        video_url="gs://bucket/runs/1/final.mp4",
+        thumbnail_url="gs://bucket/runs/1/thumbnail.jpg",
+        caption="When the asteroid mining rush begins, will space lawyers take a 30% cut?",
+        hashtags=["#Satire", "#LateNight", "#Space"],
+        sources=["Reuters", "BBC News"],
+        estimated_cost=3.2450,
+        gemini_models_used={"flash": "gemini-2.5-flash", "pro": "gemini-2.5-pro"},
+        veo_model="veo-3.1-fast-generate-001",
+        veo_resolution="720p",
+    )
+
+    assert result["webhook"] is True
+    assert len(captured_payloads) == 1
+
+    payload = captured_payloads[0]
+    expected_keys = {
+        "schema_version",
+        "event",
+        "run_id",
+        "story_id",
+        "headline",
+        "caption",
+        "hashtags",
+        "sources",
+        "review_url",
+        "video_preview_url",
+        "thumbnail_url",
+        "estimated_cost_usd",
+        "veo_model",
+        "veo_resolution",
+        "gemini_models_used",
+        "transcript_min_match_ratio",
+        "transcript_mismatch_count",
+        "error_message",
+        "created_at",
+    }
+    # All 19 JSON keys sent by notifier.py must be present
+    assert expected_keys.issubset(set(payload.keys()))
+    assert payload["run_id"] == "c0a80101-0000-0000-0000-000000000001"
+    assert payload["story_id"] == "test-story-id-456"
+    assert payload["estimated_cost_usd"] == 3.2450
+    assert payload["veo_model"] == "veo-3.1-fast-generate-001"
+    assert payload["gemini_models_used"]["pro"] == "gemini-2.5-pro"
 

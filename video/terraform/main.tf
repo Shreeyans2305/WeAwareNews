@@ -120,6 +120,32 @@ resource "random_password" "video_hmac" {
   special = false
 }
 
+# New Secret: video-api-key (dedicated key for weaware-video-api; NOT the shared main api-key)
+resource "random_password" "video_api_key" {
+  length  = 40
+  special = false
+}
+
+resource "google_secret_manager_secret" "video_api_key" {
+  secret_id = "video-api-key"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "video_api_key_version" {
+  secret      = google_secret_manager_secret.video_api_key.id
+  secret_data = random_password.video_api_key.result
+}
+
+# Video SA: Secret Manager Accessor for dedicated video-api-key
+resource "google_secret_manager_secret_iam_member" "video_api_key_sa_access" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.video_api_key.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.video_sa.email}"
+}
+
 resource "google_secret_manager_secret" "video_hmac_secret" {
   secret_id = "video-hmac-secret"
   replication {
@@ -174,6 +200,14 @@ resource "google_project_iam_member" "workflows_build_viewer" {
 resource "google_secret_manager_secret_iam_member" "workflows_api_key_access" {
   project   = var.project_id
   secret_id = "api-key"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.workflows_sa.email}"
+}
+
+# Workflows SA: Secret Manager Accessor for video-api-key (to call video API endpoints in guard)
+resource "google_secret_manager_secret_iam_member" "workflows_video_api_key_access" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.video_api_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.workflows_sa.email}"
 }
@@ -291,6 +325,16 @@ resource "google_cloud_run_v2_service" "video_api" {
           }
         }
       }
+      # Dedicated key for this service's machine endpoints (separate from main app api-key)
+      env {
+        name = "VIDEO_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.video_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
       env {
         name = "DB_PASSWORD"
         value_source {
@@ -389,6 +433,16 @@ resource "google_cloud_run_v2_job" "video_job" {
           value_source {
             secret_key_ref {
               secret  = "api-key"
+              version = "latest"
+            }
+          }
+        }
+        # Dedicated key for calling video-api machine endpoints
+        env {
+          name = "VIDEO_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.video_api_key.secret_id
               version = "latest"
             }
           }

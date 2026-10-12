@@ -52,7 +52,9 @@ class Settings(BaseModel):
 
     # API Connection
     video_api_url: str = os.getenv("VIDEO_API_URL", "http://localhost:8080")
-    api_key: str = os.getenv("API_KEY", "")
+    # VIDEO_API_KEY is the dedicated secret for this service (secret name: "video-api-key").
+    # Falls back to API_KEY only for local dev convenience; production always sets VIDEO_API_KEY.
+    api_key: str = os.getenv("VIDEO_API_KEY") or os.getenv("API_KEY", "")
 
     # Review Notifications (Make.com Custom Webhook & Pub/Sub)
     pubsub_topic_name: str = os.getenv("REVIEW_PUBSUB_TOPIC", "weaware-video-reviews")
