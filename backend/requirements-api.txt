@@ -6,3 +6,4 @@ uvicorn>=0.23.0
 psycopg2-binary>=2.9.9
 cloud-sql-python-connector[pg8000]>=1.5.0
 google-cloud-secret-manager>=2.16.0
+firebase-admin>=6.5.0,<8.0.0

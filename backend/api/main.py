@@ -6,21 +6,33 @@ Authentication: x-api-key header (value stored in Secret Manager as 'api-key').
 Database: Cloud SQL Postgres via Cloud SQL Python Connector + pg8000 (no SQLAlchemy needed).
 """
 import os
+import json
 import re
 import logging
 from contextlib import contextmanager
 from typing import List, Optional
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, Depends, HTTPException, Header, Response
+from fastapi import FastAPI, Depends, HTTPException, Header, Response, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from google.cloud import secretmanager
 from google.cloud.sql.connector import Connector, IPTypes
+import firebase_admin
+from firebase_admin import auth as firebase_auth
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="WeAware News API")
+_default_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+_allowed_origins = [origin.strip() for origin in os.getenv("WEAWARE_ALLOWED_ORIGINS", "").split(",") if origin.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=list(dict.fromkeys(_default_origins + _allowed_origins)),
+    allow_methods=["GET", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+)
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +118,39 @@ def _load_secrets() -> None:
     _api_key = os.getenv("API_KEY") or _get_secret("api-key")
     _db_pass = os.getenv("DB_PASS") or _get_secret("db-password")
     _connector = Connector()
+    # Safe, additive schema setup for the public article read API.
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS editorial_articles (
+                    article_id TEXT PRIMARY KEY,
+                    story_id TEXT NOT NULL,
+                    source_fingerprint TEXT NOT NULL UNIQUE,
+                    status TEXT NOT NULL DEFAULT 'processing',
+                    topic TEXT, title TEXT, summary TEXT,
+                    body JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    image_url TEXT,
+                    sources JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    flagged_claims JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    consensus INTEGER NOT NULL DEFAULT 0,
+                    read_mins INTEGER NOT NULL DEFAULT 1,
+                    agent_trace JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    estimated_cost_usd NUMERIC(12, 8) NOT NULL DEFAULT 0,
+                    failure_reason TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    published_at TIMESTAMPTZ
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_editorial_articles_publication ON editorial_articles(status, published_at DESC)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_editorial_articles_topic ON editorial_articles(topic, published_at DESC)")
+        finally:
+            cursor.close()
+        conn.commit()
+    finally:
+        conn.close()
     logger.info("Secrets loaded. Connector initialised.")
 
 
@@ -136,6 +181,19 @@ def get_db():
         yield conn
     finally:
         conn.close()
+
+
+def get_db_connection():
+    """Open a short-lived Cloud SQL connection for startup schema setup."""
+    instance_connection_name = os.environ["INSTANCE_CONNECTION_NAME"]
+    return _connector.connect(
+        instance_connection_name,
+        "pg8000",
+        user=os.getenv("DB_USER", "weaware_user"),
+        password=_db_pass,
+        db=os.getenv("DB_NAME", "weaware"),
+        ip_type=IPTypes.PUBLIC,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -418,3 +476,136 @@ def mark_posted(story_id: str, db=Depends(get_db), auth=Depends(verify_api_key))
         raise HTTPException(status_code=404, detail="Story not found")
 
     return {"status": "ok", "story_id": story_id}
+
+
+# ---------------------------------------------------------------------------
+# Public website article API
+# ---------------------------------------------------------------------------
+
+def _article_dict(row) -> dict:
+    def json_value(value, fallback):
+        if value is None:
+            return fallback
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except (TypeError, ValueError):
+                return fallback
+        return value
+
+    body = json_value(row[4], [])
+    if isinstance(body, list):
+        body = [_clean_article_text(paragraph) for paragraph in body if isinstance(paragraph, str)]
+
+    return {
+        "id": row[0], "topic": row[1] or "Other", "title": _clean_article_text(row[2] or ""),
+        "summary": _clean_article_text(row[3] or ""), "body": body, "image": row[5],
+        "sources": json_value(row[6], []), "flaggedClaims": json_value(row[7], []),
+        "consensus": row[8] or 0, "readMins": row[9] or 1,
+        "publishedAt": row[10].isoformat() if row[10] else None,
+    }
+
+
+_INTERNAL_SOURCE_REFS = re.compile(r"\[(?:[0-9a-f]{40,64}(?:\s*,\s*)?)+\]", re.IGNORECASE)
+
+
+def _clean_article_text(value: str) -> str:
+    """Hide internal source hashes if an older or external draft includes them inline."""
+    value = _INTERNAL_SOURCE_REFS.sub("", value)
+    value = re.sub(r"\s+([,.;:!?])", r"\1", value)
+    return re.sub(r"[ \t]{2,}", " ", value).strip()
+
+
+_ARTICLE_FIELDS = "article_id, topic, title, summary, body, image_url, sources, flagged_claims, consensus, read_mins, published_at"
+
+
+@app.get("/api/v1/articles")
+def list_articles(
+    topic: Optional[str] = Query(None, max_length=80),
+    q: Optional[str] = Query(None, max_length=200),
+    limit: int = Query(24, ge=1, le=100),
+    offset: int = Query(0, ge=0, le=10000),
+    db=Depends(get_db),
+):
+    """Return published articles for the WEAWARE feed, with topic/search filters."""
+    cursor = db.cursor()
+    clauses = ["status = 'published'"]
+    params = []
+    if topic and topic.lower() != "all":
+        clauses.append("LOWER(topic) = LOWER(%s)")
+        params.append(topic)
+    if q and q.strip():
+        clauses.append("(title ILIKE %s OR summary ILIKE %s OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(body) p WHERE p ILIKE %s))")
+        search = f"%{q.strip()}%"
+        params.extend([search, search, search])
+    where = " AND ".join(clauses)
+    cursor.execute(f"SELECT COUNT(*) FROM editorial_articles WHERE {where}", tuple(params))
+    total = cursor.fetchone()[0]
+    cursor.execute(
+        f"SELECT {_ARTICLE_FIELDS} FROM editorial_articles WHERE {where} ORDER BY published_at DESC NULLS LAST, article_id LIMIT %s OFFSET %s",
+        tuple(params + [limit, offset]),
+    )
+    articles = [_article_dict(row) for row in cursor.fetchall()]
+    cursor.close()
+    return {"articles": articles, "total": total, "limit": limit, "offset": offset}
+
+
+@app.get("/api/v1/articles/{article_id}")
+def get_article(article_id: str, db=Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute(
+        f"SELECT {_ARTICLE_FIELDS} FROM editorial_articles WHERE article_id=%s AND status='published'",
+        (article_id,),
+    )
+    row = cursor.fetchone()
+    cursor.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return _article_dict(row)
+
+
+@app.get("/api/v1/topics")
+def list_article_topics(db=Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute("SELECT DISTINCT topic FROM editorial_articles WHERE status='published' AND topic IS NOT NULL ORDER BY topic")
+    topics = [row[0] for row in cursor.fetchall()]
+    cursor.close()
+    return {"topics": topics}
+
+
+def verify_firebase_user(authorization: Optional[str] = Header(None)):
+    """Verify a Firebase ID token; callers never supply trusted profile fields."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="A Firebase bearer token is required")
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="A Firebase bearer token is required")
+
+    project_id = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+    if not project_id:
+        raise HTTPException(status_code=503, detail="Firebase authentication is not configured on this API")
+
+    try:
+        firebase_admin.get_app()
+    except ValueError:
+        firebase_admin.initialize_app(options={"projectId": project_id})
+
+    try:
+        return firebase_auth.verify_id_token(token, check_revoked=False)
+    except Exception as error:
+        logger.info("Firebase ID token rejected: %s", type(error).__name__)
+        raise HTTPException(status_code=401, detail="The Firebase sign-in token is invalid or expired") from error
+
+
+@app.get("/api/v1/auth/me")
+def current_user(claims: dict = Depends(verify_firebase_user)):
+    """Return a minimal profile derived only from a verified Firebase token."""
+    firebase_claims = claims.get("firebase") or {}
+    return {
+        "uid": claims.get("uid") or claims.get("sub"),
+        "email": claims.get("email"),
+        "emailVerified": bool(claims.get("email_verified")),
+        "displayName": claims.get("name"),
+        "photoUrl": claims.get("picture"),
+        "provider": firebase_claims.get("sign_in_provider"),
+    }

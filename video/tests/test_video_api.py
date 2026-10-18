@@ -289,13 +289,13 @@ def test_compare_and_set_status_conflict(client):
 
 def test_review_get_confirm_page_only(client):
     run_id = str(uuid.uuid4())
-    token = generate_review_token(run_id, "approve", expires_in_seconds=3600)
+    token = generate_review_token(run_id, "review", expires_in_seconds=3600)
 
     mock_cursor = MagicMock()
     mock_cursor.fetchone.return_value = {
         "status": "ready_for_review",
-        "headline_snapshot": "Exciting Satirical News",
-        "caption": "Check out this reel #comedy",
+        "headline_snapshot": "Neutral World News Report",
+        "caption": "Report based on Reuters and AP.",
         "video_gcs_uri": "gs://bucket/runs/1/final.mp4",
         "thumbnail_gcs_uri": "gs://bucket/runs/1/thumb.jpg",
     }
@@ -305,22 +305,27 @@ def test_review_get_confirm_page_only(client):
     with patch("video.api.main.get_db_connection") as mock_get_db:
         mock_get_db.return_value.__enter__.return_value = mock_conn
 
-        resp = client.get(f"/videos/review?token={token}&action=approve")
+        # Test emailed review link with only token (no action param required)
+        resp = client.get(f"/videos/review?token={token}")
         assert resp.status_code == 200
         assert "text/html" in resp.headers["content-type"]
-        assert "Exciting Satirical News" in resp.text
-        assert "Confirm Approval" in resp.text
+        assert "Neutral World News Report" in resp.text
+        assert "Approve Video" in resp.text
+        assert "Reject Video" in resp.text
+        # Ensure database was only queried, NOT updated on GET
+        mock_cursor.execute.assert_called_once()
+        assert "SELECT" in mock_cursor.execute.call_args[0][0]
 
 
 def test_review_confirm_page_flash_fallback_badge(client):
     run_id = str(uuid.uuid4())
-    token = generate_review_token(run_id, "approve", expires_in_seconds=3600)
+    token = generate_review_token(run_id, "review", expires_in_seconds=3600)
 
     mock_cursor = MagicMock()
     mock_cursor.fetchone.return_value = {
         "status": "ready_for_review",
-        "headline_snapshot": "Breaking Tech Satire",
-        "caption": "Check out this reel",
+        "headline_snapshot": "Breaking Tech Update",
+        "caption": "Neutral summary of events",
         "video_gcs_uri": "gs://bucket/runs/1/final.mp4",
         "thumbnail_gcs_uri": "gs://bucket/runs/1/thumb.jpg",
         "run_metadata": {
@@ -334,16 +339,18 @@ def test_review_confirm_page_flash_fallback_badge(client):
     with patch("video.api.main.get_db_connection") as mock_get_db:
         mock_get_db.return_value.__enter__.return_value = mock_conn
 
-        resp = client.get(f"/videos/review?token={token}&action=approve")
+        resp = client.get(f"/videos/review?token={token}")
         assert resp.status_code == 200
         assert "editor: flash fallback" in resp.text
         assert "pro_unavailable_flash_fallback" in resp.text
         assert "[editor: flash fallback]" in resp.text
+        assert "Approve Video" in resp.text
+        assert "Reject Video" in resp.text
 
 
 def test_review_commit_single_use(client):
     run_id = str(uuid.uuid4())
-    token = generate_review_token(run_id, "approve", expires_in_seconds=3600)
+    token = generate_review_token(run_id, "review", expires_in_seconds=3600)
 
     mock_cursor = MagicMock()
     # First commit succeeds (returns run_id)
@@ -354,7 +361,7 @@ def test_review_commit_single_use(client):
     with patch("video.api.main.get_db_connection") as mock_get_db:
         mock_get_db.return_value.__enter__.return_value = mock_conn
 
-        # 1. First commit
+        # 1. First commit via JSON POST
         resp = client.post("/videos/review", json={"token": token, "action": "approve"})
         assert resp.status_code == 200
         assert resp.json()["decision"] == "approved"
@@ -364,6 +371,30 @@ def test_review_commit_single_use(client):
         replay_resp = client.post("/videos/review", json={"token": token, "action": "approve"})
         assert replay_resp.status_code == 409
         assert "already been committed" in replay_resp.json()["detail"]
+
+
+def test_review_commit_form_post_reject(client):
+    run_id = str(uuid.uuid4())
+    token = generate_review_token(run_id, "review", expires_in_seconds=3600)
+
+    mock_cursor = MagicMock()
+    mock_cursor.fetchone.return_value = (run_id,)
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+    with patch("video.api.main.get_db_connection") as mock_get_db:
+        mock_get_db.return_value.__enter__.return_value = mock_conn
+
+        # Commit rejection via browser HTML form POST
+        resp = client.post(
+            "/videos/review",
+            data={"token": token, "action": "reject"},
+            headers={"content-type": "application/x-www-form-urlencoded", "accept": "text/html"},
+        )
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        assert "Video Rejected" in resp.text
+        assert run_id in resp.text
 
 
 # ---------------------------------------------------------------------------

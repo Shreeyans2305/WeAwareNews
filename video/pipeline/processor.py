@@ -8,6 +8,7 @@ import os
 import json
 import logging
 import subprocess
+import textwrap
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -46,6 +47,104 @@ def generate_subtitles_file(script: ScriptOutput, output_srt: Path) -> Path:
     return output_srt
 
 
+def _ass_timestamp(seconds: float) -> str:
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = seconds % 60
+    return f"{hours}:{minutes:02d}:{secs:05.2f}"
+
+
+def _caption_chunks(dialogue: str, width: int = 28, max_lines: int = 2) -> List[str]:
+    """Split dialogue into readable ASS cues of at most two short lines."""
+    words = dialogue.strip().strip('"').strip("'").split()
+    chunks: List[str] = []
+    current: List[str] = []
+    for word in words:
+        candidate = " ".join(current + [word])
+        wrapped = textwrap.wrap(candidate, width=width, break_long_words=False, break_on_hyphens=False)
+        if current and len(wrapped) > max_lines:
+            lines = textwrap.wrap(" ".join(current), width=width, break_long_words=False, break_on_hyphens=False)
+            chunks.append(r"\N".join(lines[:max_lines]))
+            current = [word]
+        else:
+            current.append(word)
+    if current:
+        lines = textwrap.wrap(" ".join(current), width=width, break_long_words=False, break_on_hyphens=False)
+        chunks.append(r"\N".join(lines[:max_lines]))
+    return chunks
+
+
+def generate_ass_subtitles_file(
+    script: ScriptOutput,
+    output_ass: Path,
+    clip_durations: Optional[List[float]] = None,
+    crossfade_seconds: float = 0.125,
+) -> Path:
+    """Create 1080x1920 safe-zone captions with no background box."""
+    header = """[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Caption,Arial,48,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,3,2,2,90,190,410,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    events: List[str] = []
+    current_time = 0.0
+    durations = clip_durations or [float(clip.duration_seconds) for clip in script.clips]
+    for index, (clip, duration) in enumerate(zip(script.clips, durations)):
+        chunks = _caption_chunks(clip.dialogue)
+        if not chunks:
+            continue
+        visible_duration = duration - (crossfade_seconds if index < len(durations) - 1 else 0.0)
+        chunk_duration = visible_duration / len(chunks)
+        for chunk_index, caption in enumerate(chunks):
+            start = current_time + chunk_index * chunk_duration
+            end = current_time + (chunk_index + 1) * chunk_duration
+            safe_caption = caption.replace("{", r"\{").replace("}", r"\}")
+            events.append(
+                f"Dialogue: 0,{_ass_timestamp(start)},{_ass_timestamp(end)},Caption,,0,0,0,,{safe_caption}"
+            )
+        current_time += visible_duration
+    output_ass.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
+    return output_ass
+
+
+def _probe_duration(path: Path) -> float:
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nk=1:nw=1", str(path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return float(result.stdout.strip())
+
+
+def trim_clip_to_speech_end(clip_path: Path, speech_end_seconds: float, tail_seconds: float = 0.3) -> Path:
+    """Trim to the detected final spoken word plus a short room-tone tail."""
+    duration = _probe_duration(clip_path)
+    trim_at = min(duration, max(0.5, speech_end_seconds + tail_seconds))
+    if duration - trim_at < 0.05:
+        return clip_path
+    output_path = clip_path.with_name(f"{clip_path.stem}_trimmed{clip_path.suffix}")
+    command = [
+        "ffmpeg", "-y", "-i", str(clip_path), "-t", f"{trim_at:.3f}",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart",
+        str(output_path),
+    ]
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"Clip trim failed: {result.stderr[-1000:]}")
+    return output_path
+
+
 def process_video_and_metadata(
     clip_paths: List[Path],
     script: ScriptOutput,
@@ -74,49 +173,66 @@ def process_video_and_metadata(
             "metadata": metadata_file,
         }
 
-    # 1. Prepare Concat List
-    concat_list = output_dir / "concat_list.txt"
-    with open(concat_list, "w") as f:
-        for p in clip_paths:
-            f.write(f"file '{p.resolve()}'\n")
-
-    # 2. Prepare Subtitles
-    srt_file = output_dir / "captions.srt"
-    generate_subtitles_file(script, srt_file)
+    # 1. Measure the already speech-trimmed clips and prepare ASS captions.
+    crossfade_seconds = 0.125
+    clip_durations = [_probe_duration(path) for path in clip_paths]
+    ass_file = output_dir / "captions.ass"
+    generate_ass_subtitles_file(script, ass_file, clip_durations, crossfade_seconds)
 
     # 3. Source Lower-Third Text (Strictly Text, No publisher photos)
     sources_text = "Sources: " + " + ".join(source_names[:3])
     # Sanitize for ffmpeg drawtext filter
     escaped_sources = sources_text.replace(":", "\\:").replace("'", "\\'")
 
-    # 4. FFmpeg Command
-    # Filters:
-    # - loudnorm (normalize loudness to -14 LUFS)
-    if getattr(settings, "final_output_1080p", True):
-        scale_filter = "scale=1080:1920:flags=lanczos:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2"
-        drawtext_filter = (
-            f"drawtext=text='{escaped_sources}':x=(w-text_w)/2:y=h-240:"
-            f"fontsize=28:fontcolor=white:box=1:boxcolor=black@0.6:boxborderw=10"
+    # 2. Crossfade both video and audio to avoid abrupt presenter jumps and
+    # preserve continuous room tone across boundaries.
+    input_args: List[str] = []
+    filter_parts: List[str] = []
+    for index, path in enumerate(clip_paths):
+        input_args.extend(["-i", str(path)])
+        filter_parts.append(
+            f"[{index}:v]scale=1080:1920:flags=lanczos:force_original_aspect_ratio=decrease,"
+            f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p[v{index}]"
         )
-        subtitles_filter = f"subtitles={srt_file.resolve()}:force_style='FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,Outline=2,Shadow=0,MarginV=160'"
-    else:
-        scale_filter = "scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2"
-        drawtext_filter = (
-            f"drawtext=text='{escaped_sources}':x=(w-text_w)/2:y=h-160:"
-            f"fontsize=20:fontcolor=white:box=1:boxcolor=black@0.6:boxborderw=8"
-        )
-        subtitles_filter = f"subtitles={srt_file.resolve()}:force_style='FontSize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,Outline=2,Shadow=0,MarginV=110'"
+        filter_parts.append(f"[{index}:a]aresample=48000,asetpts=PTS-STARTPTS[a{index}]")
 
-    vf_filters = f"{scale_filter},{drawtext_filter},{subtitles_filter}"
+    video_label = "v0"
+    audio_label = "a0"
+    cumulative = clip_durations[0]
+    for index in range(1, len(clip_paths)):
+        offset = cumulative - crossfade_seconds * index
+        next_video = f"vx{index}"
+        next_audio = f"ax{index}"
+        filter_parts.append(
+            f"[{video_label}][v{index}]xfade=transition=fade:duration={crossfade_seconds}:offset={offset:.3f}[{next_video}]"
+        )
+        filter_parts.append(
+            f"[{audio_label}][a{index}]acrossfade=d={crossfade_seconds}:c1=tri:c2=tri[{next_audio}]"
+        )
+        video_label = next_video
+        audio_label = next_audio
+        cumulative += clip_durations[index]
+
+    escaped_ass = str(ass_file.resolve()).replace("'", r"\'").replace(":", r"\:")
+    filter_parts.append(
+        f"[{video_label}]subtitles='{escaped_ass}',"
+        f"drawtext=text='WeAware News':x=90:y=90:fontsize=34:fontcolor=white:"
+        f"borderw=2:bordercolor=black@0.8:shadowx=1:shadowy=1,"
+        f"drawtext=text='AI-generated presenters':x=90:y=145:fontsize=26:fontcolor=white:"
+        f"borderw=2:bordercolor=black@0.8:enable='between(t,0,3)',"
+        f"drawtext=text='{escaped_sources}':x=90:y=185:fontsize=24:fontcolor=white:"
+        f"borderw=2:bordercolor=black@0.8[vout]"
+    )
+    filter_parts.append(f"[{audio_label}]loudnorm=I=-14:LRA=11:TP=-1.5[aout]")
 
     cmd = [
-        "ffmpeg", "-y",
-        "-f", "concat", "-safe", "0", "-i", str(concat_list),
-        "-vf", vf_filters,
-        "-af", "loudnorm=I=-14:LRA=11:TP=-1.5",
+        "ffmpeg", "-y", *input_args,
+        "-filter_complex", ";".join(filter_parts),
+        "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-preset", "medium", "-crf", "22", "-pix_fmt", "yuv420p",
         "-r", "30",
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+        "-movflags", "+faststart",
         str(final_video),
     ]
 
@@ -124,15 +240,7 @@ def process_video_and_metadata(
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:
         logger.error(f"FFmpeg encoding failed: {res.stderr}")
-        # Fallback simpler concatenation if filters fail (e.g. font not found)
-        fallback_cmd = [
-            "ffmpeg", "-y",
-            "-f", "concat", "-safe", "0", "-i", str(concat_list),
-            "-c:v", "libx264", "-pix_fmt", "yuv420p",
-            "-c:a", "aac",
-            str(final_video),
-        ]
-        subprocess.run(fallback_cmd, check=True)
+        raise RuntimeError(f"FFmpeg encoding failed: {res.stderr[-2000:]}")
 
     # 5. Extract Thumbnail
     thumb_cmd = [

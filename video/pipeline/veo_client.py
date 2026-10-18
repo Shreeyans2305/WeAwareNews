@@ -46,6 +46,10 @@ class VeoClient:
         self.total_veo_seconds_spent = 0
         self.total_cost_usd = 0.0
 
+    @property
+    def model_name(self) -> str:
+        return settings.active_veo_model
+
     def check_budget_and_claim(self, upcoming_seconds: int = 8) -> None:
         """
         Validates that spending will not exceed MAX_COST_USD_PER_RUN,
@@ -87,7 +91,7 @@ class VeoClient:
                 return output_path
             return Path("mock_clip.mp4")
 
-        first_frame = types.Image(image_bytes=anchor_plate_bytes, mime_type="image/png")
+        first_frame = types.Image(image_bytes=anchor_plate_bytes, mime_type="image/png") if anchor_plate_bytes else None
         current_prompt = prompt
         last_error = None
 
@@ -103,6 +107,10 @@ class VeoClient:
                     person_generation="allow_adult",
                     generate_audio=True,
                     resolution=settings.veo_resolution,
+                    negative_prompt=(
+                        "laughter, applause, audience, crowd, music, soundtrack, sound effects, comedy, "
+                        "late-night talk show, smirking, exaggerated gestures, reaction shots"
+                    ),
                 )
 
                 logger.info(f"Submitting to {settings.active_veo_model}: {current_prompt[:80]}...")

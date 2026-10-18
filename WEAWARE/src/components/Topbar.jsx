@@ -1,6 +1,7 @@
 import { Moon, Search, Sun } from 'lucide-react'
 import { TOPICS } from '../data/stories.js'
 import { useTheme } from '../theme.js'
+import AuthControl from '../auth/AuthControl.jsx'
 
 const PAGES = [
   { id: 'feed', label: 'Feed' },
@@ -9,7 +10,7 @@ const PAGES = [
   { id: 'about', label: 'About' },
 ]
 
-export default function Topbar({ page, onNavigate, activeTopic, onTopic, query, onQuery, onHome }) {
+export default function Topbar({ page, onNavigate, activeTopic, onTopic, query, onQuery, onHome, topics = [] }) {
   const { theme, toggle } = useTheme()
   const dark = theme === 'dark'
   const isFeed = page === 'feed'
@@ -66,6 +67,7 @@ export default function Topbar({ page, onNavigate, activeTopic, onTopic, query, 
               />
             </div>
           )}
+          <AuthControl />
           <button
             type="button"
             onClick={toggle}
@@ -79,7 +81,7 @@ export default function Topbar({ page, onNavigate, activeTopic, onTopic, query, 
 
       {isFeed && (
         <div className="mx-auto flex max-w-4xl items-center gap-5 overflow-x-auto px-4 pb-2 pt-2.5">
-          {['All', ...TOPICS].map((topic) => (
+          {['All', ...(topics.length ? topics : TOPICS)].map((topic) => (
             <button
               key={topic}
               type="button"

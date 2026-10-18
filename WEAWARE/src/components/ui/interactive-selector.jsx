@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, Cpu, Leaf, LineChart, Globe2, Sparkles } from 'lucide-react'
+import StoryArtwork from '../StoryArtwork.jsx'
 
 /**
  * InteractiveSelector — Vite/JSX port of the 21st.dev `interactive-selector`.
@@ -77,6 +78,7 @@ function toSelectorItems(stories) {
   if (!stories || stories.length === 0) return FALLBACK_ITEMS
   return stories.slice(0, 5).map((s) => ({
     id: s.id,
+    story: s,
     topic: s.topic,
     title: s.title,
     description: s.summary,
@@ -160,7 +162,7 @@ export default function InteractiveSelector({
                 onKeyDown={(e) => handleKeyDown(e, index)}
                 className="option relative flex cursor-pointer flex-col justify-end overflow-hidden transition-all duration-700 ease-in-out focus-visible:outline-2"
                 style={{
-                  backgroundImage: `url('${option.image}')`,
+                  backgroundImage: option.image ? `url('${option.image}')` : undefined,
                   backgroundSize: isActive ? 'auto 100%' : 'auto 120%',
                   backgroundPosition: 'center',
                   backfaceVisibility: 'hidden',
@@ -179,6 +181,11 @@ export default function InteractiveSelector({
                   willChange: 'flex-grow, background-size, background-position',
                 }}
               >
+                {!option.image && option.story && (
+                  <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+                    <StoryArtwork story={option.story} />
+                  </div>
+                )}
                 {/* Bottom shadow for legibility */}
                 <div
                   aria-hidden="true"

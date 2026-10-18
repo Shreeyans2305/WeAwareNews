@@ -4,6 +4,7 @@ import { listenMinsFor } from './ListenBar.jsx'
 import ShareSheet from './ShareSheet.jsx'
 import { TimelineContent } from './ui/timeline-animation.jsx'
 import { VerticalCutReveal } from './ui/vertical-cut-reveal.jsx'
+import StoryArtwork from './StoryArtwork.jsx'
 
 export default function Reader({ story, onBack, onListen, isListening, listeningPlaying }) {
   const heroRef = useRef(null)
@@ -25,10 +26,6 @@ export default function Reader({ story, onBack, onListen, isListening, listening
   }
 
   const clipId = `clip-article-${story.id.replace(/[^a-zA-Z0-9]/g, '')}`
-  const [lead, ...restBody] = story.body
-  const colA = restBody.slice(0, Math.ceil(restBody.length / 2))
-  const colB = restBody.slice(Math.ceil(restBody.length / 2))
-
   return (
     <article ref={heroRef} className="page-enter t-bg">
       <div className="mx-auto max-w-6xl px-4 py-8 md:px-8">
@@ -77,6 +74,7 @@ export default function Reader({ story, onBack, onListen, isListening, listening
           </div>
 
           <TimelineContent as="figure" animationNum={4} timelineRef={heroRef} customVariants={scaleVariants} className="relative">
+            {story.image ? <>
             <svg className="w-full" width="100%" height="100%" viewBox="0 0 100 40" role="img" aria-label={story.title}>
               <defs>
                 <clipPath id={clipId} clipPathUnits="objectBoundingBox">
@@ -88,7 +86,8 @@ export default function Reader({ story, onBack, onListen, isListening, listening
               </defs>
               <image clipPath={`url(#${clipId})`} preserveAspectRatio="xMidYMid slice" width="100%" height="100%" href={story.image} />
             </svg>
-            <figcaption className="t-faint mt-2 text-right text-[11px]">Illustrative image — story is a fictional demo.</figcaption>
+            <figcaption className="t-faint mt-2 text-right text-[11px]">Source image</figcaption>
+            </> : <div className="aspect-[5/2] overflow-hidden rounded-xl"><StoryArtwork story={story} /></div>}
           </TimelineContent>
 
           <div className="flex flex-wrap items-center justify-between py-3 text-sm">
@@ -127,18 +126,10 @@ export default function Reader({ story, onBack, onListen, isListening, listening
             <TimelineContent as="p" animationNum={8} timelineRef={heroRef} customVariants={revealVariants} className="t-muted mb-8 font-display text-lg font-medium leading-relaxed md:text-xl">
               {story.summary}
             </TimelineContent>
-            <TimelineContent as="div" animationNum={9} timelineRef={heroRef} customVariants={revealVariants} className="grid gap-8 md:grid-cols-2">
-              <div className="space-y-5 text-sm sm:text-base">
-                <p className="leading-relaxed">{lead}</p>
-                {colA.map((p, i) => (
-                  <p key={`a-${i}`} className="t-muted leading-relaxed">{p}</p>
-                ))}
-              </div>
-              <div className="space-y-5 text-sm sm:text-base">
-                {colB.map((p, i) => (
-                  <p key={`b-${i}`} className="leading-relaxed">{p}</p>
-                ))}
-              </div>
+            <TimelineContent as="div" animationNum={9} timelineRef={heroRef} customVariants={revealVariants} className="max-w-3xl space-y-5 break-words text-sm sm:text-base [overflow-wrap:anywhere]">
+              {story.body.map((paragraph, i) => (
+                <p key={`body-${i}`} className={`${i === 0 ? '' : 't-muted '}leading-8`}>{paragraph}</p>
+              ))}
             </TimelineContent>
           </div>
 
@@ -203,7 +194,7 @@ export default function Reader({ story, onBack, onListen, isListening, listening
                 <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: 'var(--fg)' }} />
                 <div>
                   <p className="text-sm font-medium">
-                    {source.outlet}
+                    {source.url ? <a className="underline underline-offset-2" href={source.url} target="_blank" rel="noreferrer">{source.outlet}</a> : source.outlet}
                     <span className="t-faint ml-2 text-xs font-normal capitalize">
                       {source.stance === 'agree' ? 'corroborates' : source.stance === 'context' ? 'adds context' : 'disputes'}
                     </span>

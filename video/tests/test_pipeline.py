@@ -22,7 +22,7 @@ from video.pipeline.scripter import (
 )
 from video.pipeline.picker import StoryPickerDecision
 from video.pipeline.veo_client import VeoClient, BudgetExceededError
-from video.pipeline.processor import generate_subtitles_file
+from video.pipeline.processor import generate_ass_subtitles_file, generate_subtitles_file
 from video.config.settings import settings
 
 
@@ -179,6 +179,98 @@ def test_generate_subtitles_file(tmp_path):
     assert "First line of dialogue." in content
     assert "00:00:08,000 --> 00:00:16,000" in content
     assert "Second line of dialogue." in content
+
+
+def test_ass_subtitles_use_vertical_safe_style_and_never_overlap_clip_boundaries(tmp_path):
+    script = ScriptOutput(
+        headline="Headline",
+        caption="Caption",
+        hashtags=["#News"],
+        ai_disclosure="Presenters and visuals are AI-generated.",
+        clips=[
+            ClipScript(clip_index=1, duration_seconds=8, speaker="marcus", dialogue="One two three four five six seven eight nine ten eleven twelve.", action="Neutral", camera="Medium", claims=[]),
+            ClipScript(clip_index=2, duration_seconds=8, speaker="maya", dialogue="Thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty.", action="Neutral", camera="Medium", claims=[]),
+        ],
+    )
+    ass_path = generate_ass_subtitles_file(script, tmp_path / "captions.ass", [8.0, 8.0], 0.125)
+    content = ass_path.read_text()
+    assert "PlayResX: 1080" in content
+    assert "PlayResY: 1920" in content
+    assert "Arial,48" in content
+    assert "BorderStyle, Outline" in content
+    assert r"\N" in content
+
+
+def test_media_gate_requires_transcript_and_clean_audio(tmp_path):
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+    from video.pipeline.media_gates import inspect_clip_media
+
+    clip_path = tmp_path / "clip.mp4"
+    clip_path.write_bytes(b"video")
+    payload = {
+        "transcript": "Exact neutral sentence",
+        "word_timestamps": [
+            {"word": "Exact", "start_seconds": 0.1, "end_seconds": 0.4},
+            {"word": "neutral", "start_seconds": 0.4, "end_seconds": 0.8},
+            {"word": "sentence", "start_seconds": 0.8, "end_seconds": 1.2},
+        ],
+        "laughter_detected": False,
+        "applause_detected": False,
+        "music_detected": False,
+        "crowd_detected": False,
+        "audio_notes": "Presenter voice and quiet room tone only.",
+    }
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=MagicMock(return_value=SimpleNamespace(text=json.dumps(payload)))))
+    result = inspect_clip_media(clip_path, "Exact neutral sentence", client=client, model="test")
+    assert result["match_ratio"] == 1.0
+    assert result["transcript_passed"] is True
+    assert result["audio_passed"] is True
+    assert result["speech_end_seconds"] == 1.2
+
+    payload["music_detected"] = True
+    client.models.generate_content.return_value = SimpleNamespace(text=json.dumps(payload))
+    failed = inspect_clip_media(clip_path, "Exact neutral sentence", client=client, model="test")
+    assert failed["audio_passed"] is False
+    assert failed["prohibited_audio"] == ["music"]
+
+
+def test_media_gate_normalizes_spoken_numbers_and_compounds_without_hiding_omissions(tmp_path):
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+    from video.pipeline.media_gates import inspect_clip_media
+
+    clip_path = tmp_path / "clip.mp4"
+    clip_path.write_bytes(b"video")
+    payload = {
+        "transcript": "France 24 reports an incident at Fairford Airbase for We Aware.",
+        "word_timestamps": [],
+        "laughter_detected": False,
+        "applause_detected": False,
+        "music_detected": False,
+        "crowd_detected": False,
+    }
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=MagicMock(return_value=SimpleNamespace(text=json.dumps(payload)))))
+
+    equivalent = inspect_clip_media(
+        clip_path,
+        "France Twenty-Four reports an incident at Fairford air base for WeAware.",
+        client=client,
+        model="test",
+    )
+    assert equivalent["match_ratio"] == 1.0
+    assert equivalent["transcript_passed"] is True
+
+    omitted = inspect_clip_media(
+        clip_path,
+        "France Twenty-Four reports a serious security incident at Fairford air base for WeAware.",
+        client=client,
+        model="test",
+    )
+    assert omitted["match_ratio"] < 0.90
+    assert omitted["transcript_passed"] is False
 
 
 def test_check_clip_transcript_diff(tmp_path):

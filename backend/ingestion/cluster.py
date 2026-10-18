@@ -192,6 +192,17 @@ def _word_overlap_ratio(a: str, b: str) -> float:
     return len(words_a & words_b) / len(words_a | words_b)
 
 
+def _social_title_is_only_a_link(title: str) -> bool:
+    """Treat bare shared links as non-evidence, not matching story titles."""
+    text = re.sub(
+        r"(?:https?://)?(?:www\.)?[\w.-]+\.[a-z]{2,}(?:/\S*)?",
+        " ",
+        title,
+        flags=re.IGNORECASE,
+    )
+    return not bool(re.search(r"[A-Za-z0-9]{2,}", text))
+
+
 def _within_window(
     dt_a: Optional[datetime],
     dt_b: Optional[datetime],
@@ -316,6 +327,10 @@ def _assign_hybrid(
     """
     title = normalize_text(str(item.get("title") or ""))
     raw_text = normalize_text(str(item.get("raw_text") or ""))
+    if item.get("is_social") and _social_title_is_only_a_link(title):
+        # A URL-only post (often a shared YouTube link) has no story title.
+        # Don't let generic host/path words merge it with unrelated coverage.
+        return None
     norm_title = _normalise_title(title)
     pub_dt = _parse_dt(str(item.get("published_at") or "") or None)
 
@@ -442,9 +457,12 @@ def _cluster_jaccard(
         norm_title = _normalise_title(normalize_text(str(item.get("title") or "")))
         pub_dt = _parse_dt(str(item.get("published_at") or "") or None)
         item_hash = str(item["item_hash"])
+        link_only_social = item.get("is_social") and _social_title_is_only_a_link(str(item.get("title") or ""))
 
         placed = False
         for _norm, head_dt, story_id, hashes in cluster_heads:
+            if link_only_social:
+                break
             if pub_dt and head_dt:
                 if abs((pub_dt - head_dt).total_seconds()) > window_hours * 3600:
                     continue

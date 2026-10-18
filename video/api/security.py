@@ -54,7 +54,7 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)) -> bool:
     return True
 
 
-def generate_review_token(run_id: str, action: str, expires_in_seconds: int = 86400, secret: Optional[str] = None) -> str:
+def generate_review_token(run_id: str, action: str = "review", expires_in_seconds: int = 86400, secret: Optional[str] = None) -> str:
     """
     Generate an expiring HMAC-signed review token.
     Token format: {run_id}:{action}:{expiry_timestamp}:{signature}
@@ -91,7 +91,7 @@ def verify_review_token(token: str, secret: Optional[str] = None) -> Tuple[bool,
     if not hmac.compare_digest(signature, expected_sig):
         return False, run_id, action, "Invalid token signature"
 
-    if action not in ("approve", "reject"):
+    if action not in ("approve", "reject", "review"):
         return False, run_id, action, f"Invalid action: {action}"
 
     return True, run_id, action, None

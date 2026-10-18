@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { CheckCircle2, MailOpen, Scissors, Send } from 'lucide-react'
 import { newsletters } from '../data/editions.js'
-import { stories } from '../data/stories.js'
 import Reveal from './Reveal.jsx'
 import NewsletterPersonalizer from './NewsletterPersonalizer.jsx'
 import NewsletterMasthead from './NewsletterMasthead.jsx'
@@ -92,7 +91,7 @@ function SectionHeader({ index, title, blurb }) {
   )
 }
 
-export default function NewslettersPage({ onOpenStory }) {
+export default function NewslettersPage({ onOpenStory, stories = [], topics = [] }) {
   const [subscribed, setSubscribed] = useState(() => new Set(['the-crosscheck']))
 
   const toggle = (id) => {
@@ -185,7 +184,7 @@ export default function NewslettersPage({ onOpenStory }) {
                   out. Saved locally, frontend only.
                 </p>
                 <div className="mt-6">
-                  <NewsletterPersonalizer />
+                  <NewsletterPersonalizer stories={stories} topics={topics} />
                 </div>
               </div>
             </div>

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { CheckCircle2, Copy, Mic, Scissors } from 'lucide-react'
 import { episodes } from '../data/editions.js'
-import { stories } from '../data/stories.js'
 import Reveal from './Reveal.jsx'
 import ListenAudiobook from './ListenAudiobook.jsx'
 import { PodcastReadingRoom } from './PodcastReadingRoom.jsx'
@@ -86,7 +85,7 @@ function FollowFolio({ onPlayLatest }) {
   )
 }
 
-export default function PodcastsPage({ onListen, currentListenId, listeningPlaying }) {
+export default function PodcastsPage({ onListen, currentListenId, listeningPlaying, stories = [] }) {
   const scrollToDesk = () => {
     document.getElementById('podcast-desk')?.scrollIntoView({ behavior: 'smooth' })
   }
@@ -178,7 +177,7 @@ export default function PodcastsPage({ onListen, currentListenId, listeningPlayi
                     currentId={currentListenId}
                     playing={listeningPlaying}
                     onSelect={(id) => onListen && onListen(id)}
-                    onPlayAll={() => onListen && onListen(stories[0].id)}
+                    onPlayAll={() => stories[0] && onListen && onListen(stories[0].id)}
                   />
                 </div>
               </div>

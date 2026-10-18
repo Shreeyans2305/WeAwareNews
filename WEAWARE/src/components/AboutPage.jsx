@@ -1,5 +1,4 @@
 import { ArrowRight, Link2, Scale, ShieldCheck } from 'lucide-react'
-import { stories } from '../data/stories.js'
 import Reveal from './Reveal.jsx'
 import DomainReserve from './DomainReserve.jsx'
 
@@ -21,7 +20,7 @@ const principles = [
   },
 ]
 
-export default function AboutPage({ onNavigate }) {
+export default function AboutPage({ onNavigate, stories = [] }) {
   return (
     <div className="page-enter">
       <section className="px-6 pb-10 pt-14 md:px-12 md:pt-20">

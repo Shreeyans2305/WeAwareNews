@@ -11,6 +11,7 @@ present; falls back to unauthenticated public API endpoints otherwise.
 
 import json
 import os
+import re
 from datetime import datetime
 from http.client import IncompleteRead, RemoteDisconnected
 from typing import Dict, List, Optional, Tuple
@@ -96,6 +97,22 @@ class BlueskyAdapter:
         rkey = uri.split("/")[-1] if uri else ""
         return f"https://bsky.app/profile/{handle}/post/{rkey}"
 
+    @staticmethod
+    def _external_preview(post: Dict, record: Dict) -> Dict:
+        """Return an external-link preview, when Bluesky supplied one."""
+        for container in (post.get("embed"), record.get("embed")):
+            if not isinstance(container, dict):
+                continue
+            external = container.get("external")
+            if isinstance(external, dict) and (external.get("title") or external.get("description")):
+                return external
+        return {}
+
+    @staticmethod
+    def _has_post_text_beyond_links(text: str) -> bool:
+        without_urls = re.sub(r"(?:https?://)?(?:www\.)?[\w.-]+\.[a-z]{2,}(?:/\S*)?", " ", text, flags=re.IGNORECASE)
+        return bool(re.search(r"[A-Za-z0-9]{2,}", without_urls))
+
     def _to_item(self, post: Dict, fallback_source_name: str, fetched_at: str) -> Dict:
         author = post.get("author") if isinstance(post.get("author"), dict) else {}
         handle = str(author.get("handle") or fallback_source_name)
@@ -104,6 +121,22 @@ class BlueskyAdapter:
         record = post.get("record") if isinstance(post.get("record"), dict) else {}
         text = str(record.get("text") or "").strip()
         created_at = record.get("createdAt") if record else None
+        preview = self._external_preview(post, record)
+        preview_title = str(preview.get("title") or "").strip()
+        preview_description = str(preview.get("description") or "").strip()
+
+        # Link-only posts carry almost no story evidence. Use link-card metadata
+        # to keep distinct videos/articles from collapsing together on generic
+        # URL words, while clearly marking that metadata as linked content.
+        if not self._has_post_text_beyond_links(text) and preview_title:
+            title = preview_title
+            linked_context = "Linked content preview (not the poster's own reporting): " + preview_title
+            if preview_description:
+                linked_context += ". " + preview_description
+            raw_text = f"{text}\n{linked_context}".strip()
+        else:
+            title = text[:160]
+            raw_text = text
 
         return {
             "source_id": f"bluesky-{slugify(handle)}",
@@ -111,8 +144,8 @@ class BlueskyAdapter:
             "source_type": "bluesky",
             "region": "global",
             "url": self._build_post_url(handle, uri) if uri else "",
-            "title": text[:160],
-            "raw_text": text,
+            "title": title,
+            "raw_text": raw_text,
             "published_at": created_at,
             "fetched_at": fetched_at,
             "author": handle,

@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import sys
 import time
 import subprocess
@@ -23,10 +24,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from video.config.settings import settings
 from video.config.model_selector import select_model
 from video.pipeline.picker import pick_story
-from video.pipeline.scripter import generate_script, assemble_veo_prompt
+from video.pipeline.scripter import ScriptOutput, ScriptRejected, StoryIneligible, generate_script, assemble_veo_prompt, spoken_tokens
 from video.pipeline.editor import edit_script
-from video.pipeline.veo_client import VeoClient, BudgetExceededError, ClaimCancelledError
-from video.pipeline.processor import process_video_and_metadata
+from video.pipeline.veo_client import VeoClient, BudgetExceededError, ClaimCancelledError, VeoGenerationError
+from video.pipeline.processor import process_video_and_metadata, trim_clip_to_speech_end
+from video.pipeline.media_gates import inspect_clip_media
 from video.pipeline.notifier import send_review_notifications
 from video.bootstrap_assets import load_anchors_config
 from video.api.models import VideoCandidateResponse
@@ -36,6 +38,72 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("weaware-video.runner")
+
+
+def fail_scripting_run(
+    api_url: str,
+    api_key: str,
+    run_id: str,
+    candidate: VideoCandidateResponse,
+    reason: str,
+    gemini_models_used: Optional[Dict[str, str]] = None,
+) -> None:
+    """Fail the run, thereby releasing its active story claim, and notify downstream systems."""
+    clear_reason = f"Script rejected: {reason}"[:2000]
+    update_status_via_api(
+        api_url,
+        api_key,
+        run_id,
+        "scripting",
+        "failed",
+        error_message=clear_reason,
+    )
+    send_review_notifications(
+        event="failed",
+        run_id=run_id,
+        story_id=candidate.story_id,
+        headline=candidate.headline,
+        sources=[article.source_name for article in candidate.articles],
+        error_message=clear_reason,
+        gemini_models_used=gemini_models_used or {},
+        api_base_url=api_url,
+    )
+
+
+def fail_active_run(
+    api_url: str,
+    api_key: str,
+    run_id: str,
+    candidate: VideoCandidateResponse,
+    expected_status: str,
+    reason: str,
+    estimated_cost: float = 0.0,
+    veo_seconds_used: int = 0,
+    gemini_models_used: Optional[Dict[str, str]] = None,
+) -> None:
+    """Fail any active pipeline stage and always dispatch the stable failed event."""
+    clear_reason = str(reason)[:2000]
+    update_status_via_api(
+        api_url,
+        api_key,
+        run_id,
+        expected_status,
+        "failed",
+        error_message=clear_reason,
+        estimated_cost_usd=estimated_cost,
+        veo_seconds_used=veo_seconds_used,
+    )
+    send_review_notifications(
+        event="failed",
+        run_id=run_id,
+        story_id=candidate.story_id,
+        headline=candidate.headline,
+        sources=[article.source_name for article in candidate.articles],
+        error_message=clear_reason,
+        estimated_cost=estimated_cost,
+        gemini_models_used=gemini_models_used or {},
+        api_base_url=api_url,
+    )
 
 
 def check_clip_transcript(
@@ -93,7 +161,7 @@ def check_clip_transcript(
 
     # Normalize tokens for comparison
     def norm_tokens(text: str) -> List[str]:
-        return re.findall(r"\b[a-zA-Z0-9']+\b", text.lower())
+        return [token.lower().replace("’", "'") for token in spoken_tokens(text)]
 
     s_tokens = norm_tokens(scripted_dialogue)
     t_tokens = norm_tokens(transcribed)
@@ -200,6 +268,8 @@ def run_pipeline(
     story_id_override: Optional[str] = None,
     dry_run: bool = False,
     tier: Optional[str] = None,
+    approved_diagnostic_report: Optional[Path] = None,
+    reuse_clip_dir: Optional[Path] = None,
 ):
     if tier:
         settings.veo_model_tier = tier
@@ -224,7 +294,9 @@ def run_pipeline(
     api_key = settings.api_key
 
     # 1. Fetch Candidates
-    candidates = fetch_candidates_from_api(api_url, api_key, limit=10)
+    # A direct story override bypasses ranking, not candidate/API eligibility or
+    # any downstream claim-ledger, neutrality, word-budget, or editor gate.
+    candidates = fetch_candidates_from_api(api_url, api_key, limit=50 if story_id_override else 10)
     if not candidates:
         logger.info("No eligible corroborated video candidates found. Exiting cleanly.")
         return
@@ -235,10 +307,15 @@ def run_pipeline(
         if not matching:
             logger.error(f"Specified story_id {story_id_override} not found in eligible candidates.")
             sys.exit(1)
-        candidates = matching
-
-    # 2. Story Selection
-    chosen_candidate, picker_decision, fallbacks = pick_story(candidates, model=flash_selection.model_id)
+        chosen_candidate = matching[0]
+        fallbacks = []
+        logger.info(
+            "Picker bypassed by explicit --story-id=%s; all Phase 1 editorial gates remain enabled.",
+            story_id_override,
+        )
+    else:
+        # 2. Story Selection
+        chosen_candidate, _picker_decision, fallbacks = pick_story(candidates, model=flash_selection.model_id)
     logger.info(f"Selected Candidate: {chosen_candidate.headline} (Story ID: {chosen_candidate.story_id})")
 
     # 3. Dry-run Mode check
@@ -271,11 +348,45 @@ def run_pipeline(
     script = None
     editor_decision = None
 
+    update_status_via_api(api_url, api_key, run_id, "claimed", "scripting")
+
+    approved_script: Optional[ScriptOutput] = None
+    if approved_diagnostic_report:
+        report = json.loads(approved_diagnostic_report.read_text(encoding="utf-8"))
+        row = next((item for item in report.get("results", []) if item.get("story_id") == current_candidate.story_id), None)
+        if not row or not row.get("script"):
+            fail_scripting_run(
+                api_url, api_key, run_id, current_candidate,
+                "Approved diagnostic report does not contain the selected story script",
+                {"flash": flash_selection.model_id, "pro": pro_selection.model_id},
+            )
+            return
+        approved_script = ScriptOutput.model_validate(row["script"])
+        logger.info("Loaded the user-approved script verbatim from %s", approved_diagnostic_report)
+
     # 5. Script & Editor Loop with fallback
-    for attempt in range(settings.max_editor_fallbacks + 1):
-        update_status_via_api(api_url, api_key, run_id, "claimed", "scripting")
-        logger.info(f"Writing satirical script for {current_candidate.headline} (model={pro_selection.model_id})...")
-        script = generate_script(current_candidate, anchors_config=anchors_config, model=pro_selection.model_id)
+    script_attempts = 1 if approved_script else settings.max_editor_fallbacks + 1
+    for attempt in range(script_attempts):
+        try:
+            if approved_script:
+                script = approved_script
+            else:
+                logger.info(
+                    "Writing neutral broadcast script for %s (attempt %s, model=%s)...",
+                    current_candidate.headline, attempt + 1, pro_selection.model_id,
+                )
+                script = generate_script(current_candidate, anchors_config=anchors_config, model=pro_selection.model_id)
+        except (ScriptRejected, StoryIneligible) as exc:
+            logger.error("Scripting failed closed: %s", exc)
+            fail_scripting_run(
+                api_url,
+                api_key,
+                run_id,
+                current_candidate,
+                str(exc),
+                {"flash": flash_selection.model_id, "pro": pro_selection.model_id},
+            )
+            return
 
         logger.info(f"Conducting Standards & Practices Editor pass (model={pro_selection.model_id}, fallback={is_pro_fallback})...")
         editor_decision = edit_script(current_candidate, script, model=pro_selection.model_id, is_fallback=is_pro_fallback)
@@ -285,13 +396,20 @@ def run_pipeline(
             break
         else:
             logger.warning(f"Editor flagged script: {editor_decision.critique_reason}")
-            if fallback_pool:
+            if fallback_pool and not approved_script:
                 current_candidate = fallback_pool.pop(0)
                 logger.info(f"Falling back to candidate: {current_candidate.headline}")
             else:
                 logger.error("No more fallback candidates available.")
-                update_status_via_api(api_url, api_key, run_id, "scripting", "failed", error_message="Editor rejected script, no fallbacks")
-                sys.exit(1)
+                fail_scripting_run(
+                    api_url,
+                    api_key,
+                    run_id,
+                    current_candidate,
+                    f"Editor rejected script: {editor_decision.critique_reason}",
+                    {"flash": flash_selection.model_id, "pro": pro_selection.model_id},
+                )
+                return
 
     # 6. Veo Video Generation
     update_status_via_api(api_url, api_key, run_id, "scripting", "generating_video")
@@ -300,48 +418,116 @@ def run_pipeline(
     run_dir = Path("video/scratch") / f"run_{run_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load anchor plate
-    plate_path = Path("video/scratch/anchor_plate.png")
-    anchor_bytes = plate_path.read_bytes() if plate_path.exists() else b""
-
     clip_paths = []
+    media_checks = []
     try:
+        from google import genai
+        media_client = genai.Client(
+            vertexai=True,
+            project=settings.project_id,
+            location=flash_selection.location,
+        )
         for clip in script.clips:
+            # Resolve conditioning plate for this clip
+            speaker = getattr(clip, "speaker", "marcus") or "marcus"
+            framing = "medium" if "medium" in (getattr(clip, "camera", "") or "").lower() else "wide"
+            candidate_plate_paths = [
+                *([Path("video/assets/anchors/maya_medium_cool_studio_v3_safe.png")] if speaker == "maya" else []),
+                *([Path("video/assets/anchors/maya_medium_cool_studio_v2.png")] if speaker == "maya" else []),
+                Path(f"video/assets/anchors/{speaker}_{framing}.png"),
+                Path(f"video/assets/anchors/{speaker}_medium.png"),
+                Path("video/assets/anchors/marcus_medium.png"),
+                Path("video/scratch/anchor_plate.png"),
+                Path("video/assets/sets/studio_main.png"),
+            ]
+            anchor_bytes = b""
+            for p in candidate_plate_paths:
+                if p.exists():
+                    anchor_bytes = p.read_bytes()
+                    break
+
             clip_prompt = assemble_veo_prompt(clip, anchors_config)
-            clip_file = run_dir / f"clip_{clip.clip_index}.mp4"
-            logger.info(f"Generating Clip {clip.clip_index}/4 ({clip.duration_seconds}s)...")
-            veo_client.generate_single_clip(
-                prompt=clip_prompt,
-                anchor_plate_bytes=anchor_bytes,
-                duration_seconds=clip.duration_seconds,
-                output_path=clip_file,
-                mock_mode=False,
-            )
-            clip_paths.append(clip_file)
+            reusable_clip = reuse_clip_dir / f"clip_{clip.clip_index}_attempt_1.mp4" if reuse_clip_dir else None
+            if reusable_clip and reusable_clip.exists():
+                reused_file = run_dir / f"clip_{clip.clip_index}_reused.mp4"
+                shutil.copy2(reusable_clip, reused_file)
+                inspection = inspect_clip_media(
+                    reused_file,
+                    clip.dialogue,
+                    client=media_client,
+                    model=flash_selection.model_id,
+                )
+                inspection.update({
+                    "clip_index": clip.clip_index,
+                    "speaker": clip.speaker,
+                    "generation_attempt": 0,
+                    "reused_from": str(reusable_clip),
+                })
+                media_checks.append(inspection)
+                logger.info(
+                    "Reused clip %s gates: transcript=%.3f audio_passed=%s prohibited=%s",
+                    clip.clip_index,
+                    inspection["match_ratio"],
+                    inspection["audio_passed"],
+                    inspection["prohibited_audio"],
+                )
+                if inspection["transcript_passed"] and inspection["audio_passed"]:
+                    trimmed = trim_clip_to_speech_end(reused_file, inspection["speech_end_seconds"], tail_seconds=0.3)
+                    clip_paths.append(trimmed)
+                    continue
+                logger.warning("Reusable clip %s failed current media gates; generating it again.", clip.clip_index)
+            for media_attempt in range(2):
+                clip_file = run_dir / f"clip_{clip.clip_index}_attempt_{media_attempt + 1}.mp4"
+                logger.info(
+                    "Generating clip %s/4 (%ss), media attempt %s/2...",
+                    clip.clip_index, clip.duration_seconds, media_attempt + 1,
+                )
+                veo_client.generate_single_clip(
+                    prompt=clip_prompt,
+                    anchor_plate_bytes=anchor_bytes,
+                    duration_seconds=clip.duration_seconds,
+                    output_path=clip_file,
+                    mock_mode=False,
+                )
+                inspection = inspect_clip_media(
+                    clip_file,
+                    clip.dialogue,
+                    client=media_client,
+                    model=flash_selection.model_id,
+                )
+                inspection["clip_index"] = clip.clip_index
+                inspection["speaker"] = clip.speaker
+                inspection["generation_attempt"] = media_attempt + 1
+                media_checks.append(inspection)
+                logger.info(
+                    "Clip %s gates: transcript=%.3f audio_passed=%s prohibited=%s",
+                    clip.clip_index,
+                    inspection["match_ratio"],
+                    inspection["audio_passed"],
+                    inspection["prohibited_audio"],
+                )
+                if inspection["transcript_passed"] and inspection["audio_passed"]:
+                    trimmed = trim_clip_to_speech_end(clip_file, inspection["speech_end_seconds"], tail_seconds=0.3)
+                    clip_paths.append(trimmed)
+                    break
+                if media_attempt == 0:
+                    logger.warning("Clip %s failed a media gate; regenerating once.", clip.clip_index)
+                    continue
+                raise VeoGenerationError(
+                    f"Clip {clip.clip_index} failed after one regeneration: "
+                    f"transcript_match={inspection['match_ratio']:.3f}, "
+                    f"prohibited_audio={inspection['prohibited_audio']}"
+                )
 
     except Exception as e:
         logger.error(f"Video generation aborted: {e}")
-        update_status_via_api(
-            api_url, api_key, run_id, "generating_video", "failed",
-            error_message=str(e),
-            estimated_cost_usd=veo_client.total_cost_usd,
-            veo_seconds_used=veo_client.total_veo_seconds_spent,
+        fail_active_run(
+            api_url, api_key, run_id, current_candidate, "generating_video", str(e),
+            veo_client.total_cost_usd,
+            veo_client.total_veo_seconds_spent,
+            {"flash": flash_selection.model_id, "pro": pro_selection.model_id},
         )
-        sys.exit(1)
-
-    # 6b. Automated post-generation transcript verification (Gemini Flash audio input)
-    transcript_checks = []
-    if not dry_run:
-        logger.info("Running automatic post-generation transcript verification with Gemini Flash audio...")
-        for clip, clip_file in zip(script.clips, clip_paths):
-            check_res = check_clip_transcript(clip_file, clip.dialogue)
-            check_res["clip_index"] = clip.clip_index
-            check_res["speaker"] = clip.speaker
-            transcript_checks.append(check_res)
-            logger.info(
-                f"Clip {clip.clip_index} Transcript Match: {check_res['match_ratio']}% "
-                f"({len(check_res['mismatches'])} mismatches)"
-            )
+        return
 
     # 7. Post-Production (FFmpeg)
     update_status_via_api(api_url, api_key, run_id, "generating_video", "post_processing")
@@ -358,7 +544,8 @@ def run_pipeline(
         "veo_model": settings.active_veo_model,
         "estimated_cost_usd": veo_client.total_cost_usd,
         "veo_seconds_used": veo_client.total_veo_seconds_spent,
-        "transcript_checks": transcript_checks,
+        "transcript_checks": media_checks,
+        "audio_gate_passed": all(check["audio_passed"] for check in media_checks),
         "pro_model": pro_selection.model_id,
         "flash_model": flash_selection.model_id,
         "pro_selection_reason": pro_selection.reason,
@@ -367,20 +554,30 @@ def run_pipeline(
         **({"model_fallback_reason": "pro_unavailable_flash_fallback"} if is_pro_fallback else {}),
     }
 
-    artifacts = process_video_and_metadata(
-        clip_paths=clip_paths,
-        script=script,
-        source_names=source_names,
-        output_dir=run_dir,
-        run_metadata=run_metadata,
-        mock_mode=False,
-    )
+    try:
+        artifacts = process_video_and_metadata(
+            clip_paths=clip_paths,
+            script=script,
+            source_names=source_names,
+            output_dir=run_dir,
+            run_metadata=run_metadata,
+            mock_mode=False,
+        )
 
-    # Upload final artifacts to GCS
-    gcs_run_prefix = f"gs://{settings.gcs_bucket}/runs/{run_id}"
-    upload_to_gcs(artifacts["video"], f"{gcs_run_prefix}/final.mp4")
-    upload_to_gcs(artifacts["thumbnail"], f"{gcs_run_prefix}/thumbnail.jpg")
-    upload_to_gcs(artifacts["metadata"], f"{gcs_run_prefix}/metadata.json")
+        # Upload final artifacts to GCS
+        gcs_run_prefix = f"gs://{settings.gcs_bucket}/runs/{run_id}"
+        upload_to_gcs(artifacts["video"], f"{gcs_run_prefix}/final.mp4")
+        upload_to_gcs(artifacts["thumbnail"], f"{gcs_run_prefix}/thumbnail.jpg")
+        upload_to_gcs(artifacts["metadata"], f"{gcs_run_prefix}/metadata.json")
+    except Exception as exc:
+        logger.error("Post-processing or upload failed: %s", exc)
+        fail_active_run(
+            api_url, api_key, run_id, current_candidate, "post_processing", str(exc),
+            veo_client.total_cost_usd,
+            veo_client.total_veo_seconds_spent,
+            {"flash": flash_selection.model_id, "pro": pro_selection.model_id},
+        )
+        return
 
     # 8. Mark Ready For Review & Notify
     final_video_gcs = f"{gcs_run_prefix}/final.mp4"
@@ -400,7 +597,7 @@ def run_pipeline(
     )
 
     logger.info("✓ Dispatched review notifications via Pub/Sub and Webhook.")
-    send_review_notifications(
+    notification_result = send_review_notifications(
         run_id=run_id,
         story_id=current_candidate.story_id,
         headline=script.headline,
@@ -411,22 +608,42 @@ def run_pipeline(
         sources=source_names,
         estimated_cost=veo_client.total_cost_usd,
         gemini_models_used={"flash": flash_selection.model_id, "pro": pro_selection.model_id},
-        veo_model=veo_client.model_name,
+        veo_model=settings.active_veo_model,
         veo_resolution=settings.veo_resolution,
+        transcript_min_match_ratio=min(check["match_ratio"] for check in media_checks),
+        transcript_mismatch_count=sum(not check["transcript_passed"] for check in media_checks),
     )
+
+    if notification_result.get("review_url"):
+        logger.info("REVIEW LINK (terminal only): %s", notification_result["review_url"])
 
     logger.info(f"✓ Pipeline run {run_id} completed successfully and is ready for review!")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="WeAware Late Night Video Pipeline Runner")
-    parser.add_argument("--story-id", help="Override and force specific story_id")
+    parser.add_argument(
+        "--story-id",
+        help="Bypass picker ranking for this eligible story_id; all editorial gates still run",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Mocks Veo and tests selection + script generation read-only")
     parser.add_argument("--tier", choices=["fast", "standard"], help="Veo model tier (fast | standard)")
+    parser.add_argument(
+        "--approved-diagnostic-report",
+        type=Path,
+        help="Load the exact approved script for --story-id from a diagnostic JSON report; editor gates still run",
+    )
+    parser.add_argument(
+        "--reuse-clip-dir",
+        type=Path,
+        help="Reinspect and reuse passing clip_N_attempt_1.mp4 files before generating missing clips",
+    )
     args = parser.parse_args()
 
     run_pipeline(
         story_id_override=args.story_id,
         dry_run=args.dry_run,
         tier=args.tier,
+        approved_diagnostic_report=args.approved_diagnostic_report,
+        reuse_clip_dir=args.reuse_clip_dir,
     )

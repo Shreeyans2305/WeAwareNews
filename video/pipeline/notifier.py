@@ -162,14 +162,16 @@ def send_review_notifications(
     api_base_url: Optional[str] = None,
     event: str = "ready_for_review",
     error_message: Optional[str] = None,
-) -> Dict[str, bool]:
+) -> Dict[str, Any]:
     """
     Sends notification to Cloud Pub/Sub and Make.com Custom Webhook.
     Never raises an exception or fails the video run.
     """
     api_url = api_base_url or settings.video_api_url
-    review_token = generate_review_token(run_id, "review", expires_in_seconds=86400)
-    review_url = f"{api_url}/videos/review?token={review_token}"
+    review_url = ""
+    if event == "ready_for_review":
+        review_token = generate_review_token(run_id, "review", expires_in_seconds=86400)
+        review_url = f"{api_url}/videos/review?token={review_token}"
 
     payload = build_webhook_payload(
         event=event,
@@ -191,7 +193,7 @@ def send_review_notifications(
         error_message=error_message,
     )
 
-    results = {"pubsub": False, "webhook": False}
+    results: Dict[str, Any] = {"pubsub": False, "webhook": False, "review_url": review_url}
 
     # 1. Cloud Pub/Sub Notification
     try:

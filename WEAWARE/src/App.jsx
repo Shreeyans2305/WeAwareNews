@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
-import { stories } from './data/stories.js'
+import { fetchArticle, fetchArticles, fetchTopics, prioritizeStoriesWithImages, toStory } from './lib/api.js'
 import { ThemeProvider, useTheme } from './theme.js'
 import Topbar from './components/Topbar.jsx'
 import FeedGrid from './components/FeedGrid.jsx'
@@ -11,6 +11,8 @@ import AboutPage from './components/AboutPage.jsx'
 import SiteFooter from './components/SiteFooter.jsx'
 import ListenBar from './components/ListenBar.jsx'
 import ShareSheet from './components/ShareSheet.jsx'
+import AuthControl from './auth/AuthControl.jsx'
+import { AuthProvider } from './auth/AuthContext.jsx'
 
 const NAV_LINKS = [
   { id: 'feed', label: 'Feed' },
@@ -48,7 +50,7 @@ function Hero({ onNavigate }) {
         playsInline
         preload="auto"
         poster="/weaware-poster.jpg"
-        src="/weaware-bg.mp4"
+        src="/intro-preview.mp4"
       />
 
       <div className="relative z-10 flex min-h-screen flex-col px-4 pt-3 md:px-8">
@@ -84,6 +86,7 @@ function Hero({ onNavigate }) {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
+            <AuthControl />
             <a href="#waitlist" className="t-btn-primary rounded-full px-4 py-1.5 text-[13px] font-medium">
               Join waitlist
             </a>
@@ -149,6 +152,54 @@ function Shell() {
   const [listenId, setListenId] = useState(null)
   const [listeningPlaying, setListeningPlaying] = useState(false)
   const [shareId, setShareId] = useState(null)
+  const [stories, setStories] = useState([])
+  const [topics, setTopics] = useState([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [apiError, setApiError] = useState('')
+  const [detail, setDetail] = useState(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchTopics(controller.signal).then((result) => setTopics(result.topics || [])).catch(() => {})
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+      fetchArticles({ topic, query, signal: controller.signal })
+        .then((result) => {
+          setStories(prioritizeStoriesWithImages((result.articles || []).map(toStory)))
+          setTotal(result.total || 0)
+          setApiError('')
+        })
+        .catch((error) => {
+          if (error.name !== 'AbortError') setApiError('We could not load the news feed. Check your connection and try again.')
+        })
+        .finally(() => setLoading(false))
+    }, 200)
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [topic, query])
+
+  useEffect(() => {
+    if (!activeId) {
+      setDetail(null)
+      return
+    }
+    const controller = new AbortController()
+    fetchArticle(activeId, controller.signal)
+      .then((article) => setDetail(toStory(article)))
+      .catch((error) => {
+        if (error.name !== 'AbortError') setDetail(stories.find((story) => story.id === activeId) || null)
+      })
+    return () => controller.abort()
+  }, [activeId])
 
   const navigate = (next) => {
     if (next === 'hero') {
@@ -169,16 +220,11 @@ function Shell() {
     )
   }
 
-  const q = query.trim().toLowerCase()
-  const filtered = stories.filter(
-    (story) =>
-      (topic === 'All' || story.topic === topic) &&
-      (q === '' || `${story.title} ${story.summary}`.toLowerCase().includes(q)),
-  )
-  const activeStory = stories.find((story) => story.id === activeId) ?? null
+  const filtered = stories
+  const activeStory = detail || stories.find((story) => story.id === activeId) || null
 
   const resultLabel =
-    `${filtered.length} ${filtered.length === 1 ? 'story' : 'stories'}` +
+    `${total} ${total === 1 ? 'story' : 'stories'}` +
     (topic !== 'All' ? ` in ${topic}` : '') +
     (query.trim() !== '' ? ` matching “${query.trim()}”` : '')
 
@@ -209,6 +255,19 @@ function Shell() {
     setListeningPlaying(true)
   }
 
+  const loadMoreStories = async () => {
+    setLoadingMore(true)
+    try {
+      const result = await fetchArticles({ topic, query, offset: stories.length })
+      setStories((current) => prioritizeStoriesWithImages([...current, ...(result.articles || []).map(toStory)]))
+      setTotal(result.total || 0)
+    } catch {
+      setApiError('We could not load more articles. Please try again.')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
   const goHome = () => navigate('hero')
   const listenStory = stories.find((s) => s.id === listenId) ?? null
   const shareStory = stories.find((s) => s.id === shareId) ?? null
@@ -219,6 +278,7 @@ function Shell() {
         page={view}
         onNavigate={navigate}
         activeTopic={topic}
+        topics={topics}
         onTopic={setTopic}
         query={query}
         onQuery={setQuery}
@@ -239,23 +299,25 @@ function Shell() {
           />
         ) : null}
         {view === 'feed' && !activeStory ? (
-          <FeedGrid
-            stories={filtered}
-            resultLabel={resultLabel}
-            onOpen={openStory}
-            onListen={startListen}
-            onShare={setShareId}
-            onClear={() => {
-              setTopic('All')
-              setQuery('')
-            }}
-          />
+          apiError ? <section className="mx-auto max-w-4xl px-6 py-20 text-center"><h1 className="font-display text-3xl font-bold">News feed unavailable</h1><p role="alert" className="t-muted mt-3">{apiError}</p></section>
+            : loading && !stories.length ? <section className="mx-auto max-w-4xl px-6 py-20 text-center t-muted">Loading the latest cross-checked articles…</section>
+              : <>
+                <FeedGrid
+                  stories={filtered}
+                  resultLabel={resultLabel}
+                  onOpen={openStory}
+                  onListen={startListen}
+                  onShare={setShareId}
+                  onClear={() => { setTopic('All'); setQuery('') }}
+                />
+                {stories.length < total && <div className="px-6 pb-12 text-center"><button type="button" onClick={loadMoreStories} disabled={loadingMore} className="t-btn-outline rounded-full px-6 py-2.5 text-sm">{loadingMore ? 'Loading…' : 'Load more articles'}</button></div>}
+              </>
         ) : null}
-        {view === 'newsletters' ? <NewslettersPage onOpenStory={openStory} /> : null}
+        {view === 'newsletters' ? <NewslettersPage onOpenStory={openStory} stories={stories} topics={topics} /> : null}
         {view === 'podcasts' ? (
-          <PodcastsPage onListen={startListen} currentListenId={listenId} listeningPlaying={listeningPlaying} />
+          <PodcastsPage onListen={startListen} currentListenId={listenId} listeningPlaying={listeningPlaying} stories={stories} />
         ) : null}
-        {view === 'about' ? <AboutPage onNavigate={navigate} /> : null}
+        {view === 'about' ? <AboutPage onNavigate={navigate} stories={stories} /> : null}
       </main>
       <SiteFooter onNavigate={navigate} current={view} />
       {listenStory ? (
@@ -281,7 +343,9 @@ function Shell() {
 export default function App() {
   return (
     <ThemeProvider>
-      <Shell />
+      <AuthProvider>
+        <Shell />
+      </AuthProvider>
     </ThemeProvider>
   )
 }

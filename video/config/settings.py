@@ -11,7 +11,7 @@ class Settings(BaseModel):
     # GCP Environment
     project_id: str = os.getenv("GOOGLE_CLOUD_PROJECT", "project-9ba21d45-1dfd-4108-b69")
     location: str = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-    gcs_bucket: str = os.getenv("VIDEO_BUCKET_NAME", f"weaware-video-assets-{os.getenv('GOOGLE_CLOUD_PROJECT', 'project-9ba21d45')}")
+    gcs_bucket: str = os.getenv("VIDEO_BUCKET_NAME", f"weaware-video-assets-{os.getenv('GOOGLE_CLOUD_PROJECT', 'project-9ba21d45-1dfd-4108-b69')}")
 
     # Video Pipeline Durations & Clip Plan
     # Default [8, 8, 8, 8] = 32s (Veo 3.1 discrete durations: 4, 6, 8s)
@@ -62,9 +62,10 @@ class Settings(BaseModel):
     hmac_secret_name: str = "video-hmac-secret"
 
     # Brand voice & metadata
-    brand_name: str = "WeAware Late Night"
-    brand_tagline: str = "Corroborated news, satirical conclusions."
-    satire_disclosure: str = "AI-generated political satire grounded in verified multi-source news reporting."
+    brand_name: str = "WeAware News"
+    brand_tagline: str = "Corroborated multi-source news reporting."
+    ai_disclosure_template: str = "Presenters and visuals are AI-generated. Report based on {sources}."
+    satire_disclosure: str = "Presenters and visuals are AI-generated."
 
     @property
     def active_veo_model(self) -> str:

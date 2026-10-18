@@ -1,3 +1,5 @@
+import StoryArtwork from './StoryArtwork.jsx'
+
 function Byline({ story }) {
   return (
     <p className="byline mt-3">
@@ -30,15 +32,15 @@ export default function FrontPageGrid({ stories, onOpenStory }) {
             <Byline story={lead} />
             <figure className="mt-5">
               <div className="t-border overflow-hidden border">
-                <img
+                {lead.image ? <img
                   src={lead.image}
                   alt={lead.title}
                   loading="lazy"
                   className="newspaper-img aspect-[16/9] w-full object-cover"
-                />
+                /> : <div className="aspect-[16/9] overflow-hidden"><StoryArtwork story={lead} /></div>}
               </div>
               <figcaption className="t-faint mt-2 text-xs leading-relaxed">
-                {lead.summary} <span className="t-muted">Photo: WeAware demo archive.</span>
+                {lead.summary} <span className="t-muted">{lead.image ? 'Source image.' : 'Editorial artwork created for this story.'}</span>
               </figcaption>
             </figure>
             <div className="article-justify article-columns-2 font-body-serif mt-5 text-[15px] leading-[1.75]">
@@ -70,12 +72,12 @@ export default function FrontPageGrid({ stories, onOpenStory }) {
                 </h3>
                 <Byline story={s} />
                 <div className="t-border mt-3 overflow-hidden border">
-                  <img
+                  {s.image ? <img
                     src={s.image}
                     alt={s.title}
                     loading="lazy"
                     className="newspaper-img aspect-[16/10] w-full object-cover"
-                  />
+                  /> : <div className="aspect-[16/10] overflow-hidden"><StoryArtwork story={s} /></div>}
                 </div>
                 <p className="t-muted mt-3 text-sm leading-relaxed">{s.summary}</p>
                 <div className="mt-3 flex items-center gap-3">

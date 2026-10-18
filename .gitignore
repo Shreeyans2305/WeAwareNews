@@ -139,6 +139,8 @@ make-workflow.txt
 *.mp4
 *.avi
 *.mkv
+# Small, compressed local hero-video preview used by the WEAWARE frontend.
+!WEAWARE/public/intro-preview.mp4
 # ─── Misc ───
 *.tgz
 *.zip

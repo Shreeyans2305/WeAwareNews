@@ -28,8 +28,21 @@ export default function SiteFooter({ onNavigate, current }) {
             </button>
           ))}
         </nav>
+        <nav aria-label="Contact WeAware" className="flex flex-wrap items-center gap-5">
+          <a
+            href="https://www.instagram.com/weawarenews"
+            target="_blank"
+            rel="noreferrer"
+            className="nav-link"
+          >
+            Instagram
+          </a>
+          <a href="mailto:weaware.news@gmail.com" className="nav-link">
+            Email
+          </a>
+        </nav>
       </div>
-      <p className="t-faint mx-auto mt-6 max-w-4xl text-xs">© 2026 WeAware. All outlets and events in previews are fictional demos.</p>
+      <p className="t-faint mx-auto mt-6 max-w-4xl text-xs">© 2026 WeAware. Articles include links to their original reporting sources.</p>
     </footer>
   )
 }

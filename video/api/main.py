@@ -140,7 +140,7 @@ def get_video_candidates(
                     SELECT unnest(source_urls) AS u
                     FROM video_runs
                     WHERE created_at >= NOW() - (%s * INTERVAL '1 day')
-                      AND status != 'failed'
+                      AND status NOT IN ('failed', 'rejected')
                 ) sub
                 """,
                 (dedupe_days,),
@@ -426,20 +426,26 @@ def check_rate_limit(client_ip: str, limit: int = 20, window_seconds: int = 60):
 def get_video_review_page(
     request: Request,
     token: str = Query(...),
-    action: str = Query(..., pattern="^(approve|reject)$"),
+    action: Optional[str] = Query(None, pattern="^(approve|reject|review)$"),
 ):
     """
     Confirm page only (NO state change on GET).
     Verifies HMAC token and renders human approval confirmation UI with QA checklist.
+    Provides distinct Approve and Reject POST buttons.
     """
     client_ip = request.client.host if request.client else "unknown"
     check_rate_limit(client_ip)
 
     valid, run_id, token_action, err = verify_review_token(token)
-    if not valid or token_action != action:
+    if not valid:
         return HTMLResponse(
             status_code=400,
-            content=f"<html><body style='font-family:sans-serif;padding:40px;text-align:center;'><h2>Invalid or Expired Review Token</h2><p>{err or 'Action mismatch'}</p></body></html>",
+            content=f"<html><body style='font-family:sans-serif;padding:40px;text-align:center;'><h2>Invalid or Expired Review Token</h2><p>{err or 'Invalid token'}</p></body></html>",
+        )
+    if action and token_action not in ("review", action):
+        return HTMLResponse(
+            status_code=400,
+            content="<html><body style='font-family:sans-serif;padding:40px;text-align:center;'><h2>Invalid Review Token</h2><p>Action mismatch</p></body></html>",
         )
 
     with get_db_connection() as conn:
@@ -472,7 +478,6 @@ def get_video_review_page(
                     spk = tc.get("speaker", "Anchor")
                     ratio = tc.get("match_ratio", 0.0)
                     mismatches = tc.get("mismatches", [])
-                    diff = tc.get("diff", "")
                     
                     status_badge = f"<span style='color:#10b981;font-weight:bold;'>{ratio}% Match</span>" if ratio >= 90 else f"<span style='color:#f59e0b;font-weight:bold;'>{ratio}% Match</span>"
                     mismatch_desc = ""
@@ -498,9 +503,6 @@ def get_video_review_page(
                     <div style='font-size:0.75rem;color:#64748b;'>*Informational only — check audio/video before final approval.</div>
                 </div>
                 """
-
-            btn_color = "#10b981" if action == "approve" else "#ef4444"
-            btn_text = "Confirm Approval" if action == "approve" else "Confirm Rejection"
 
             is_flash_fallback = (
                 metadata.get("pro_selection_reason") == "pro_unavailable_flash_fallback"
@@ -533,7 +535,7 @@ def get_video_review_page(
             <!DOCTYPE html>
             <html>
             <head>
-                <title>WeAware Late Night - Review Video</title>
+                <title>WeAware News - Review Video</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>
                     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; display: flex; justify-content: center; }}
@@ -544,13 +546,16 @@ def get_video_review_page(
                     .checklist h4 {{ margin: 0 0 8px 0; color: #f59e0b; font-size: 0.9rem; }}
                     .checklist label {{ display: block; margin-bottom: 6px; cursor: pointer; }}
                     .uri {{ font-size: 0.8rem; color: #64748b; margin-bottom: 20px; word-break: break-all; }}
-                    button {{ background: {btn_color}; color: white; border: none; padding: 14px 24px; border-radius: 8px; font-size: 1rem; font-weight: bold; width: 100%; cursor: pointer; transition: opacity 0.2s; }}
+                    .actions {{ display: flex; gap: 16px; margin-top: 20px; }}
+                    .actions form {{ flex: 1; }}
+                    button.approve {{ background: #10b981; color: white; border: none; padding: 14px 20px; border-radius: 8px; font-size: 1rem; font-weight: bold; width: 100%; cursor: pointer; transition: opacity 0.2s; }}
+                    button.reject {{ background: #ef4444; color: white; border: none; padding: 14px 20px; border-radius: 8px; font-size: 1rem; font-weight: bold; width: 100%; cursor: pointer; transition: opacity 0.2s; }}
                     button:hover {{ opacity: 0.9; }}
                 </style>
             </head>
             <body>
                 <div class="card">
-                    <h2>WeAware Late Night Review ({action.upper()})</h2>
+                    <h2>WeAware News Review</h2>
                     <p><b>Headline:</b> {headline}</p>
                     <div class="caption"><b>Caption:</b><br>{caption}</div>
                     
@@ -567,11 +572,18 @@ def get_video_review_page(
                     </div>
 
                     <div class="uri"><b>Video GCS:</b> {video_uri}</div>
-                    <form method="POST" action="/videos/review">
-                        <input type="hidden" name="token" value="{token}">
-                        <input type="hidden" name="action" value="{action}">
-                        <button type="submit">{btn_text}</button>
-                    </form>
+                    <div class="actions">
+                        <form method="POST" action="/videos/review">
+                            <input type="hidden" name="token" value="{token}">
+                            <input type="hidden" name="action" value="approve">
+                            <button type="submit" class="approve">Approve Video</button>
+                        </form>
+                        <form method="POST" action="/videos/review">
+                            <input type="hidden" name="token" value="{token}">
+                            <input type="hidden" name="action" value="reject">
+                            <button type="submit" class="reject">Reject Video</button>
+                        </form>
+                    </div>
                 </div>
             </body>
             </html>
@@ -602,9 +614,15 @@ async def commit_video_review(request: Request):
     if not token or not action:
         raise HTTPException(status_code=400, detail="Missing token or action")
 
+    if action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail=f"Invalid action: {action}")
+
     valid, run_id, token_action, err = verify_review_token(token)
-    if not valid or token_action != action:
-        raise HTTPException(status_code=400, detail=err or "Token action mismatch")
+    if not valid:
+        raise HTTPException(status_code=400, detail=err or "Invalid token")
+
+    if token_action != "review" and token_action != action:
+        raise HTTPException(status_code=400, detail="Token action mismatch")
 
     target_status = "approved" if action == "approve" else "rejected"
 
@@ -633,6 +651,24 @@ async def commit_video_review(request: Request):
                 )
 
             logger.info(f"Video run {run_id} transitioned to {target_status} by human reviewer.")
+
+            if "text/html" in request.headers.get("accept", "") or "application/x-www-form-urlencoded" in content_type:
+                decision_label = "Approved" if target_status == "approved" else "Rejected"
+                decision_color = "#10b981" if target_status == "approved" else "#ef4444"
+                return HTMLResponse(
+                    content=f"""<!DOCTYPE html>
+<html>
+<head><title>WeAware News - Review Recorded</title></head>
+<body style='font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0f172a;color:#f8fafc;padding:40px;display:flex;justify-content:center;'>
+<div style='max-width:520px;width:100%;background:#1e293b;padding:32px;border-radius:12px;text-align:center;'>
+    <h2 style='color:{decision_color};margin-top:0;'>Video {decision_label}</h2>
+    <p style='color:#cbd5e1;'>Decision successfully committed for video run <code style='color:#38bdf8;'>{run_id}</code>.</p>
+    <p style='color:#94a3b8;font-size:0.9rem;'>Status: <b>{target_status}</b></p>
+</div>
+</body>
+</html>"""
+                )
+
             return {"status": "ok", "run_id": run_id, "decision": target_status}
 
 

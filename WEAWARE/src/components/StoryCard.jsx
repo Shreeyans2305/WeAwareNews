@@ -1,5 +1,6 @@
 import { Clock, Headphones, Share2 } from 'lucide-react'
 import { listenMinsFor } from './ListenBar.jsx'
+import StoryArtwork from './StoryArtwork.jsx'
 
 function TopicBadge({ topic }) {
   return <span className="text-[11px] font-semibold uppercase tracking-[0.18em] t-muted">{topic}</span>
@@ -23,8 +24,9 @@ export default function StoryCard({ story, featured = false, onOpen, onListen, o
         className="stagger-item t-card grid grid-cols-1 overflow-hidden rounded-2xl border text-left md:grid-cols-2"
       >
         <button type="button" onClick={open} aria-label={`Read: ${story.title}`} className="relative overflow-hidden text-left">
-          <img src={story.image} alt="" className="h-56 w-full object-cover md:h-full" />
-          <span aria-hidden="true" className="glass-nav absolute bottom-2 left-2 rounded-full px-2 py-0.5 text-[10px] t-faint">Illustrative image</span>
+          {story.image
+            ? <img src={story.image} alt="" className="h-56 w-full object-cover md:h-full" />
+            : <StoryArtwork story={story} className="h-56 md:h-full" />}
         </button>
         <div className="flex flex-col justify-center p-6 md:p-8">
           <div className="flex items-center justify-between gap-2">
@@ -76,8 +78,9 @@ export default function StoryCard({ story, featured = false, onOpen, onListen, o
       className="stagger-item t-card flex flex-col overflow-hidden rounded-2xl border text-left"
     >
       <button type="button" onClick={open} aria-label={`Read: ${story.title}`} className="relative aspect-video overflow-hidden text-left">
-        <img src={story.image} alt="" loading="lazy" className="h-full w-full object-cover" />
-        <span aria-hidden="true" className="glass-nav absolute bottom-2 left-2 rounded-full px-2 py-0.5 text-[10px] t-faint">Illustrative image</span>
+        {story.image
+          ? <img src={story.image} alt="" loading="lazy" className="h-full w-full object-cover" />
+          : <StoryArtwork story={story} />}
       </button>
       <div className="flex flex-1 flex-col p-5">
         <div className="flex items-center justify-between gap-2">

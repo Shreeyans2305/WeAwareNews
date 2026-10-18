@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { CheckCircle2, MailOpen, Sparkles } from 'lucide-react'
-import { TOPICS, stories } from '../data/stories.js'
+import { TOPICS } from '../data/stories.js'
 
-export default function NewsletterPersonalizer() {
+export default function NewsletterPersonalizer({ stories = [], topics = [] }) {
   const [selected, setSelected] = useState(() => new Set(['AI', 'Good News']))
   const [cadence, setCadence] = useState('weekly')
   const [length, setLength] = useState('7 min')
@@ -33,7 +33,7 @@ export default function NewsletterPersonalizer() {
           <div className="mt-5">
             <p className="t-muted text-xs font-medium uppercase tracking-[0.14em]">Topics</p>
             <div className="mt-2.5 flex flex-wrap gap-2">
-              {TOPICS.map((topic) => {
+              {(topics.length ? topics : TOPICS).map((topic) => {
                 const active = selected.has(topic)
                 return (
                   <button key={topic} type="button" onClick={() => toggleTopic(topic)} aria-pressed={active} className={active ? 't-btn-primary rounded-full px-4 py-1.5 text-sm' : 't-btn-outline rounded-full px-4 py-1.5 text-sm'}>

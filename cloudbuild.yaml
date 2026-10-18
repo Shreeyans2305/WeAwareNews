@@ -46,15 +46,23 @@ steps:
         echo "[$(date -u)] STEP 4: Updating DB (sync_to_postgres.py)..."
         echo "[$(date -u)] ======================================"
         python sync_to_postgres.py --full
+
+        echo "[$(date -u)] ======================================"
+        echo "[$(date -u)] STEP 5: Generating reviewed articles (Gemini)..."
+        echo "[$(date -u)] ======================================"
+        python -m editorial.pipeline
         
         echo "[$(date -u)] ======================================"
-        echo "[$(date -u)] STEP 5: Cleaning up proxy..."
+        echo "[$(date -u)] STEP 6: Cleaning up proxy..."
         echo "[$(date -u)] ======================================"
         pkill cloud-sql-proxy || true
         
         echo "[$(date -u)] Pipeline completed successfully!"
     env:
       - 'GOOGLE_CLOUD_PROJECT=project-9ba21d45-1dfd-4108-b69'
+      - 'GOOGLE_CLOUD_LOCATION=us-central1'
+      - 'DB_HOST=127.0.0.1'
+      - 'DB_PORT=5433'
       - 'PYTHONUNBUFFERED=1'
 
 options:
