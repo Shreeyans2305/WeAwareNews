@@ -50,6 +50,8 @@ def run() -> None:
         request_timeout_seconds=settings.request_timeout_seconds,
         max_items_per_source=settings.max_items_per_source,
         tier_intervals_seconds=settings.polling.intervals_by_tier_seconds,
+        max_workers=settings.rss_workers,
+        max_item_age_days=settings.max_item_age_days,
     )
     news_api_adapter = NewsAPIAdapter(
         request_timeout_seconds=settings.request_timeout_seconds,

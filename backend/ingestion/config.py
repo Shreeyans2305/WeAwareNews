@@ -39,6 +39,8 @@ class Settings:
     polling: PollingConfig
     request_timeout_seconds: int
     max_items_per_source: int
+    rss_workers: int
+    max_item_age_days: int
     bluesky_curated_accounts: List[str]
     bluesky_keywords: List[str]
 
@@ -62,6 +64,8 @@ def load_settings() -> Settings:
         ),
         request_timeout_seconds=timeout,
         max_items_per_source=max_items,
+        rss_workers=int(os.getenv("WEAWARE_RSS_WORKERS", "8")),
+        max_item_age_days=int(os.getenv("WEAWARE_MAX_ITEM_AGE_DAYS", "7")),
         bluesky_curated_accounts=_csv_env(
             "BLUESKY_CURATED_ACCOUNTS",
             [

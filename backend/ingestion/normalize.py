@@ -58,6 +58,7 @@ def normalize_items(raw_items: Iterable[Dict]) -> List[Dict]:
             "lang": normalize_text(str(item.get("lang") or "en")),
             "paywall": bool(item.get("paywall", False)),
             "is_social": bool(item.get("is_social", False)),
+            "image_url": str(item.get("image_url") or "").strip() or None,
             "extraction_status": _extraction_status(raw_text),
             # Populated by the clustering stage in run_stage1.py
             "story_id": None,

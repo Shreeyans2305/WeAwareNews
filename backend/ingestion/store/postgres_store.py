@@ -180,7 +180,7 @@ class PostgresIngestionStore:
                         extraction_status              = EXCLUDED.extraction_status,
                         story_id                       = EXCLUDED.story_id,
                         has_cross_source_corroboration = EXCLUDED.has_cross_source_corroboration,
-                        image_url                      = EXCLUDED.image_url
+                        image_url                      = COALESCE(EXCLUDED.image_url, items.image_url)
                     """,
                     rows,
                 )

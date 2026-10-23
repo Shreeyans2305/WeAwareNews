@@ -268,7 +268,7 @@ class SQLiteIngestionStore:
                     extraction_status              = excluded.extraction_status,
                     story_id                       = excluded.story_id,
                     has_cross_source_corroboration = excluded.has_cross_source_corroboration,
-                    image_url                      = excluded.image_url
+                    image_url                      = COALESCE(excluded.image_url, items.image_url)
                 """,
                 rows,
             )

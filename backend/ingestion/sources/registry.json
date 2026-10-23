@@ -1,6 +1,5 @@
 {
   "sources": [
-    {"feed_id": "ap-top-news", "source_id": "associated-press", "source_name": "Associated Press", "url": "https://feeds.apnews.com/rss/apf-topnews", "region": "us", "type": "general", "paywall": false, "tier": "primary"},
     {"feed_id": "npr-national", "source_id": "npr", "source_name": "NPR", "url": "https://feeds.npr.org/1001/rss.xml", "region": "us", "type": "general", "paywall": false, "tier": "primary"},
     {"feed_id": "npr-world", "source_id": "npr", "source_name": "NPR", "url": "https://feeds.npr.org/1004/rss.xml", "region": "us", "type": "world", "paywall": false, "tier": "primary"},
     {"feed_id": "nyt-homepage", "source_id": "new-york-times", "source_name": "New York Times", "url": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml", "region": "us", "type": "general", "paywall": true, "tier": "primary"},
@@ -38,7 +37,6 @@
     {"feed_id": "wsj-markets", "source_id": "wall-street-journal", "source_name": "Wall Street Journal", "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml", "region": "us", "type": "business", "paywall": true, "tier": "primary"},
     {"feed_id": "bloomberg-markets", "source_id": "bloomberg", "source_name": "Bloomberg", "url": "https://feeds.bloomberg.com/markets/news.rss", "region": "us", "type": "business", "paywall": true, "tier": "primary"},
     {"feed_id": "bloomberg-technology", "source_id": "bloomberg", "source_name": "Bloomberg", "url": "https://feeds.bloomberg.com/technology/news.rss", "region": "us", "type": "technology", "paywall": true, "tier": "secondary"},
-    {"feed_id": "economist-latest", "source_id": "the-economist", "source_name": "The Economist", "url": "https://www.economist.com/latest/rss.xml", "region": "uk", "type": "general", "paywall": true, "tier": "secondary"},
     {"feed_id": "livemint-news", "source_id": "livemint", "source_name": "Livemint", "url": "https://www.livemint.com/rss/news", "region": "in", "type": "business", "paywall": true, "tier": "secondary"},
     {"feed_id": "economic-times-latest", "source_id": "the-economic-times", "source_name": "The Economic Times", "url": "https://economictimes.indiatimes.com/rssfeedsdefault.cms", "region": "in", "type": "business", "paywall": false, "tier": "secondary"},
     {"feed_id": "business-standard-latest", "source_id": "business-standard", "source_name": "Business Standard", "url": "http://www.business-standard.com/rss/latest.rss", "region": "in", "type": "business", "paywall": false, "tier": "secondary"},
@@ -51,6 +49,24 @@
     {"feed_id": "the-verge-rss", "source_id": "the-verge", "source_name": "The Verge", "url": "https://www.theverge.com/rss/index.xml", "region": "us", "type": "technology", "paywall": false, "tier": "secondary"},
     {"feed_id": "krebs-security", "source_id": "krebs-on-security", "source_name": "Krebs on Security", "url": "https://krebsonsecurity.com/feed", "region": "us", "type": "security", "paywall": false, "tier": "secondary"},
 
-    {"feed_id": "reuters-bridge-google-news", "source_id": "reuters", "source_name": "Reuters", "url": "https://news.google.com/rss/search?q=when:24h+allinurl:reuters.com", "region": "global", "type": "wire", "paywall": false, "tier": "primary"}
+    {"feed_id": "abc-us-top", "source_id": "abc-news-us", "source_name": "ABC News", "url": "https://feeds.abcnews.com/abcnews/topstories", "region": "us", "type": "general", "paywall": false, "tier": "primary"},
+    {"feed_id": "abc-us-world", "source_id": "abc-news-us", "source_name": "ABC News", "url": "https://feeds.abcnews.com/abcnews/internationalheadlines", "region": "us", "type": "world", "paywall": false, "tier": "primary"},
+    {"feed_id": "abc-us-politics", "source_id": "abc-news-us", "source_name": "ABC News", "url": "https://feeds.abcnews.com/abcnews/politicsheadlines", "region": "us", "type": "politics", "paywall": false, "tier": "secondary"},
+    {"feed_id": "pbs-headlines", "source_id": "pbs-newshour", "source_name": "PBS NewsHour", "url": "https://www.pbs.org/newshour/feeds/rss/headlines", "region": "us", "type": "general", "paywall": false, "tier": "primary"},
+    {"feed_id": "pbs-politics", "source_id": "pbs-newshour", "source_name": "PBS NewsHour", "url": "https://www.pbs.org/newshour/feeds/rss/politics", "region": "us", "type": "politics", "paywall": false, "tier": "secondary"},
+    {"feed_id": "africanews-latest", "source_id": "africanews", "source_name": "Africanews", "url": "https://www.africanews.com/feed/rss", "region": "africa", "type": "general", "paywall": false, "tier": "primary"},
+    {"feed_id": "nasa-news-releases", "source_id": "nasa", "source_name": "NASA", "url": "https://www.nasa.gov/news-release/feed/", "region": "us", "type": "science", "paywall": false, "tier": "secondary"},
+    {"feed_id": "nasa-technology", "source_id": "nasa", "source_name": "NASA", "url": "https://www.nasa.gov/technology/feed/", "region": "us", "type": "technology", "paywall": false, "tier": "secondary"},
+    {"feed_id": "ecb-press", "source_id": "ecb", "source_name": "European Central Bank", "url": "https://www.ecb.europa.eu/rss/press.html", "region": "eu", "type": "business", "paywall": false, "tier": "secondary"},
+    {"feed_id": "ecb-statistics", "source_id": "ecb", "source_name": "European Central Bank", "url": "https://www.ecb.europa.eu/rss/statpress.html", "region": "eu", "type": "business", "paywall": false, "tier": "secondary"},
+    {"feed_id": "usgs-earthquakes", "source_id": "usgs", "source_name": "US Geological Survey", "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.atom", "region": "global", "type": "disaster", "paywall": false, "tier": "secondary"},
+    {"feed_id": "iaea-news", "source_id": "iaea", "source_name": "International Atomic Energy Agency", "url": "https://www.iaea.org/feeds/news", "region": "global", "type": "energy", "paywall": false, "tier": "secondary"},
+    {"feed_id": "science-news", "source_id": "science-news", "source_name": "Science News", "url": "https://www.sciencenews.org/feed", "region": "us", "type": "science", "paywall": true, "tier": "secondary"},
+    {"feed_id": "voa-africa", "source_id": "voice-of-america", "source_name": "Voice of America", "url": "https://www.voanews.com/api/z-botl-vomx-tpertmq", "region": "africa", "type": "regional", "paywall": false, "tier": "secondary"},
+    {"feed_id": "voa-south-central-asia", "source_id": "voice-of-america", "source_name": "Voice of America", "url": "https://www.voanews.com/api/z_-mqyl-vomx-tpevyvqv", "region": "asia", "type": "regional", "paywall": false, "tier": "secondary"},
+    {"feed_id": "voa-middle-east", "source_id": "voice-of-america", "source_name": "Voice of America", "url": "https://www.voanews.com/api/zrbopl-vomx-tpeovm_", "region": "middle-east", "type": "regional", "paywall": false, "tier": "secondary"},
+    {"feed_id": "voa-europe", "source_id": "voice-of-america", "source_name": "Voice of America", "url": "https://www.voanews.com/api/zjbovl-vomx-tpebvmr", "region": "eu", "type": "regional", "paywall": false, "tier": "secondary"},
+    {"feed_id": "straits-singapore", "source_id": "straits-times", "source_name": "The Straits Times", "url": "https://www.straitstimes.com/news/singapore/rss.xml", "region": "sg", "type": "national", "paywall": true, "tier": "secondary"},
+    {"feed_id": "straits-asia", "source_id": "straits-times", "source_name": "The Straits Times", "url": "https://www.straitstimes.com/news/asia/rss.xml", "region": "asia", "type": "regional", "paywall": true, "tier": "secondary"}
   ]
 }

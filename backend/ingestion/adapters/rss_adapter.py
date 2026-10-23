@@ -11,9 +11,11 @@ ingestion/sources/registry.json so the feed list is managed in one place.
 """
 
 import json
-from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from urllib.request import Request, urlopen
 
 import feedparser
 
@@ -27,10 +29,14 @@ class RSSAdapter:
         request_timeout_seconds: int,
         max_items_per_source: int,
         tier_intervals_seconds: Dict[str, int],
+        max_workers: int = 8,
+        max_item_age_days: int = 7,
     ) -> None:
         self.request_timeout_seconds = request_timeout_seconds
         self.max_items_per_source = max_items_per_source
         self.tier_intervals_seconds = tier_intervals_seconds
+        self.max_workers = max(1, max_workers)
+        self.max_item_age_days = max_item_age_days
         self.sources = self._load_sources(registry_path)
 
     # ------------------------------------------------------------------
@@ -40,7 +46,16 @@ class RSSAdapter:
     @staticmethod
     def _load_sources(registry_path: Path) -> List[Dict]:
         data = json.loads(registry_path.read_text(encoding="utf-8"))
-        return data["sources"]
+        sources = data["sources"]
+        feed_ids = [source["feed_id"] for source in sources]
+        if len(feed_ids) != len(set(feed_ids)):
+            raise ValueError("Duplicate feed_id in RSS registry")
+        for source in sources:
+            if not all(source.get(key) for key in ("feed_id", "source_id", "source_name")):
+                raise ValueError(f"Incomplete RSS source: {source}")
+            if not str(source.get("url", "")).startswith(("https://", "http://")):
+                raise ValueError(f"Invalid RSS feed URL: {source['feed_id']}")
+        return sources
 
     # ------------------------------------------------------------------
     # Polling-interval gate
@@ -59,7 +74,10 @@ class RSSAdapter:
 
         tier = str(source.get("tier", "secondary"))
         interval = self.tier_intervals_seconds.get(tier, self.tier_intervals_seconds["secondary"])
-        last_polled_dt = datetime.fromisoformat(last_polled_at)
+        try:
+            last_polled_dt = datetime.fromisoformat(last_polled_at)
+        except ValueError:
+            return True
         elapsed_seconds = (now_utc - last_polled_dt).total_seconds()
         return elapsed_seconds >= interval
 
@@ -80,18 +98,18 @@ class RSSAdapter:
         cannot abort the entire run.
         """
         try:
-            parsed = feedparser.parse(
-                url,
-                request_headers={"User-Agent": "WeAwareIngestion/1.0 (+RSS Poller)"},
-                agent="WeAwareIngestion/1.0 (+RSS Poller)",
-            )
+            request = Request(url, headers={"User-Agent": "WeAwareIngestion/1.0 (+RSS Poller)"})
+            with urlopen(request, timeout=self.request_timeout_seconds) as response:
+                # A bad endpoint should not download an unbounded body into a build worker.
+                body = response.read(2_000_001)
+            if len(body) > 2_000_000:
+                return [], "Feed exceeds 2 MB"
+            parsed = feedparser.parse(body)
         except Exception as exc:
             return [], str(exc)
 
-        http_status = parsed.get("status", 200)
-        if http_status and http_status >= 400:
-            return [], f"HTTP {http_status}"
-
+        if not parsed.version:
+            return [], "Response is not an RSS or Atom feed"
         if parsed.bozo and not parsed.entries:
             return [], f"Parse error: {parsed.bozo_exception}"
 
@@ -186,18 +204,30 @@ class RSSAdapter:
         poll_updates: Dict[str, str] = {}
         errors: List[str] = []
 
-        for source in self.sources:
-            if not self._due_for_poll(source, now_utc, last_polled_at_by_feed_id):
-                continue
+        due_sources = [
+            source for source in self.sources
+            if self._due_for_poll(source, now_utc, last_polled_at_by_feed_id)
+        ]
+        with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
+            results = list(pool.map(lambda source: self._parse_feed(str(source["url"])), due_sources))
 
-            entries, error = self._parse_feed(str(source["url"]))
-            poll_updates[str(source["feed_id"])] = fetched_at
+        oldest_allowed = now_utc - timedelta(days=self.max_item_age_days)
+        for source, (entries, error) in zip(due_sources, results):
 
             if error:
                 errors.append(f"RSS fetch failed for {source['feed_id']}: {error}")
                 continue
 
+            poll_updates[str(source["feed_id"])] = fetched_at
+
             for entry in entries[: self.max_items_per_source]:
+                published_at = entry.get("published_at")
+                if self.max_item_age_days > 0 and published_at:
+                    try:
+                        if datetime.fromisoformat(published_at) < oldest_allowed:
+                            continue
+                    except ValueError:
+                        pass
                 raw_items.append(
                     {
                         "source_id": source["source_id"],
