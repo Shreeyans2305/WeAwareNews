@@ -102,7 +102,37 @@ def _load_candidate_ids(conn, limit: int) -> list[str]:
             (int(os.getenv("WEAWARE_ARTICLE_MIN_SOURCES", "2")), excluded_story_ids,
              int(os.getenv("WEAWARE_ARTICLE_MIN_TEXT_SOURCES", "2")), limit),
         )
-        return [row[0] for row in cur.fetchall()]
+        candidate_ids = [row[0] for row in cur.fetchall()]
+
+        # Add India-covered stories after the unchanged global shortlist. Two
+        # independent India-based publishers must have usable text; this adds
+        # editorial capacity without displacing any globally ranked story.
+        india_extra = max(0, int(os.getenv("WEAWARE_ARTICLE_INDIA_EXTRA", "5")))
+        if india_extra:
+            cur.execute(
+                f"""WITH india_text AS (
+                        SELECT story_id, COUNT(DISTINCT source_id) AS india_sources
+                        FROM items
+                        WHERE region='in' AND COALESCE(raw_text,'') <> ''
+                          AND COALESCE(is_social,0)=0
+                          AND LOWER(COALESCE(source_type,'')) NOT IN ('bluesky','social')
+                        GROUP BY story_id
+                        HAVING COUNT(DISTINCT source_id) >= 2
+                    )
+                    SELECT s.story_id FROM stories s
+                    JOIN india_text t ON t.story_id=s.story_id
+                    WHERE s.source_count >= %s
+                      AND s.recency::timestamptz >= NOW() - INTERVAL '7 days'
+                      AND NOT (s.story_id = ANY(%s))
+                      AND NOT (s.story_id = ANY(%s))
+                      {existing_article_filter}
+                    ORDER BY s.recency DESC, t.india_sources DESC, s.source_count DESC
+                    LIMIT %s""",
+                (int(os.getenv("WEAWARE_ARTICLE_MIN_SOURCES", "2")),
+                 excluded_story_ids, candidate_ids, india_extra),
+            )
+            candidate_ids.extend(row[0] for row in cur.fetchall())
+        return candidate_ids
 
 
 def _tracked_spend(conn) -> float:

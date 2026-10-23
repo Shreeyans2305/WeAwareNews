@@ -21,11 +21,13 @@ old AP endpoint had no working DNS, The Economist endpoint returned 403, and the
 Google News Reuters query returned no entries; those entries were removed. A
 single check is not a promise that any publisher will keep a feed active.
 
-There is no country quota or geography multiplier in article selection. Stories
-qualify through independent source count and source text, then are ordered by
-source count and recency. More Indian feeds increase coverage and the chance that
-Indian stories independently corroborate, while using the same selection rules
-for every country.
+The global editorial shortlist still qualifies stories through independent source
+count and source text, then orders by source count and recency. An additive pass
+selects up to five more recent stories with usable text from two independent
+India-based publishers. It runs after the global shortlist, so no globally ranked
+story is removed. This pass considers stories from the last seven days and orders
+them by recency. Publisher location is a coverage signal, not proof that an event
+happened in India. `WEAWARE_ARTICLE_INDIA_EXTRA` controls the additional count.
 
 ## Polling controls
 
