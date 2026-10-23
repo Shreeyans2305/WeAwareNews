@@ -60,8 +60,12 @@ steps:
         echo "[$(date -u)] Pipeline completed successfully!"
     env:
       - 'GOOGLE_CLOUD_PROJECT=weaware'
-      - 'GOOGLE_CLOUD_LOCATION=us-central1'
+      - 'GOOGLE_CLOUD_LOCATION=global'
       - 'WEAWARE_GEMINI_BUDGET_USD=10'
+      - 'WEAWARE_GEMINI_MODEL=gemini-3.8-flash'
+      - 'WEAWARE_GEMINI_INPUT_USD_PER_MILLION=1.50'
+      - 'WEAWARE_GEMINI_OUTPUT_USD_PER_MILLION=7.50'
+      - 'WEAWARE_GEMINI_THINKING_USD_PER_MILLION=7.50'
       - 'DB_HOST=127.0.0.1'
       - 'DB_PORT=5433'
       - 'PYTHONUNBUFFERED=1'

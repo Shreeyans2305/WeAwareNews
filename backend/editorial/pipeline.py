@@ -176,9 +176,9 @@ def process_story(conn, client: genai.Client, model: str, story_id: str, run_usa
     trace: dict[str, Any] = {}
     usage = {"input_tokens": 0, "output_tokens": 0, "thinking_tokens": 0}
     usage_recorded = False
-    input_rate = float(os.getenv("WEAWARE_GEMINI_INPUT_USD_PER_MILLION", "0.15"))
-    output_rate = float(os.getenv("WEAWARE_GEMINI_OUTPUT_USD_PER_MILLION", "0.60"))
-    thinking_rate = float(os.getenv("WEAWARE_GEMINI_THINKING_USD_PER_MILLION", "3.50"))
+    input_rate = float(os.getenv("WEAWARE_GEMINI_INPUT_USD_PER_MILLION", "1.50"))
+    output_rate = float(os.getenv("WEAWARE_GEMINI_OUTPUT_USD_PER_MILLION", "7.50"))
+    thinking_rate = float(os.getenv("WEAWARE_GEMINI_THINKING_USD_PER_MILLION", "7.50"))
 
     def estimated_cost() -> float:
         return (usage["input_tokens"] * input_rate + usage["output_tokens"] * output_rate + usage["thinking_tokens"] * thinking_rate) / 1_000_000
@@ -273,8 +273,8 @@ def run_pipeline(limit: int = 20) -> dict:
     import psycopg2
 
     project = os.getenv("GOOGLE_CLOUD_PROJECT")
-    location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-    model = os.getenv("WEAWARE_GEMINI_MODEL", "gemini-2.5-flash")
+    location = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
+    model = os.getenv("WEAWARE_GEMINI_MODEL", "gemini-3.8-flash")
     client = genai.Client(vertexai=True, project=project, location=location)
     password = os.getenv("DB_PASS")
     if not password:
@@ -301,9 +301,9 @@ def run_pipeline(limit: int = 20) -> dict:
         usage = {"input_tokens": 0, "output_tokens": 0, "thinking_tokens": 0}
         published = sum(process_story(conn, client, model, story_id, usage) for story_id in story_ids)
         estimated_cost = (
-            usage["input_tokens"] * float(os.getenv("WEAWARE_GEMINI_INPUT_USD_PER_MILLION", "0.15"))
-            + usage["output_tokens"] * float(os.getenv("WEAWARE_GEMINI_OUTPUT_USD_PER_MILLION", "0.60"))
-            + usage["thinking_tokens"] * float(os.getenv("WEAWARE_GEMINI_THINKING_USD_PER_MILLION", "3.50"))
+            usage["input_tokens"] * float(os.getenv("WEAWARE_GEMINI_INPUT_USD_PER_MILLION", "1.50"))
+            + usage["output_tokens"] * float(os.getenv("WEAWARE_GEMINI_OUTPUT_USD_PER_MILLION", "7.50"))
+            + usage["thinking_tokens"] * float(os.getenv("WEAWARE_GEMINI_THINKING_USD_PER_MILLION", "7.50"))
         ) / 1_000_000
         return {"selected": len(story_ids), "published": published, "failed": len(story_ids) - published,
                 **usage, "estimated_cost_usd": round(estimated_cost, 6)}
