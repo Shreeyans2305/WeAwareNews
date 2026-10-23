@@ -61,6 +61,7 @@ steps:
     env:
       - 'GOOGLE_CLOUD_PROJECT=weaware'
       - 'GOOGLE_CLOUD_LOCATION=us-central1'
+      - 'WEAWARE_GEMINI_BUDGET_USD=10'
       - 'DB_HOST=127.0.0.1'
       - 'DB_PORT=5433'
       - 'PYTHONUNBUFFERED=1'
