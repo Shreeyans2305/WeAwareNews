@@ -202,7 +202,7 @@ def _save_failure(conn, story_id: str, reason: str, trace: dict, estimated_cost:
     conn.commit()
 
 
-def process_story(conn, client: genai.Client, model: str, story_id: str, run_usage: dict) -> bool:
+def process_story(conn, client: genai.Client, model: str, story_id: str, run_usage: dict) -> Optional[bool]:
     trace: dict[str, Any] = {}
     usage = {"input_tokens": 0, "output_tokens": 0, "thinking_tokens": 0}
     usage_recorded = False
@@ -227,7 +227,7 @@ def process_story(conn, client: genai.Client, model: str, story_id: str, run_usa
         story, sources = _load_story(conn, story_id)
         article_id = _save_processing(conn, story_id, story["source_fingerprint"])
         if article_id is None:
-            return True  # This evidence set has already been published.
+            return None  # This evidence set has already been published.
         if len(sources) < int(os.getenv("WEAWARE_ARTICLE_MIN_TEXT_SOURCES", "2")):
             raise ValueError("not enough source text for independent review")
         source_records = [
@@ -329,13 +329,16 @@ def run_pipeline(limit: int = 20) -> dict:
         conn.commit()
         story_ids = _load_candidate_ids(conn, limit)
         usage = {"input_tokens": 0, "output_tokens": 0, "thinking_tokens": 0}
-        published = sum(process_story(conn, client, model, story_id, usage) for story_id in story_ids)
+        outcomes = [process_story(conn, client, model, story_id, usage) for story_id in story_ids]
+        published = sum(outcome is True for outcome in outcomes)
+        failed = sum(outcome is False for outcome in outcomes)
+        skipped = sum(outcome is None for outcome in outcomes)
         estimated_cost = (
             usage["input_tokens"] * float(os.getenv("WEAWARE_GEMINI_INPUT_USD_PER_MILLION", "1.50"))
             + usage["output_tokens"] * float(os.getenv("WEAWARE_GEMINI_OUTPUT_USD_PER_MILLION", "7.50"))
             + usage["thinking_tokens"] * float(os.getenv("WEAWARE_GEMINI_THINKING_USD_PER_MILLION", "7.50"))
         ) / 1_000_000
-        return {"selected": len(story_ids), "published": published, "failed": len(story_ids) - published,
+        return {"selected": len(story_ids), "published": published, "failed": failed, "skipped": skipped,
                 **usage, "estimated_cost_usd": round(estimated_cost, 6)}
     finally:
         conn.close()
