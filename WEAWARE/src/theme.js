@@ -4,9 +4,13 @@ const ThemeContext = createContext({ theme: 'dark', toggle: () => {} })
 
 export function getInitialTheme() {
   if (typeof window === 'undefined') return 'dark'
-  const saved = window.localStorage.getItem('weaware-theme')
-  if (saved === 'dark' || saved === 'light') return saved
-  return 'dark'
+  try {
+    const saved = window.localStorage.getItem('weaware-theme')
+    if (saved === 'dark' || saved === 'light') return saved
+  } catch {
+    // Storage can be unavailable in private browsing contexts.
+  }
+  return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
 }
 
 export function ThemeProvider({ children }) {
@@ -15,7 +19,11 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     document.body.setAttribute('data-theme', theme)
-    window.localStorage.setItem('weaware-theme', theme)
+    try {
+      window.localStorage.setItem('weaware-theme', theme)
+    } catch {
+      // The selected theme remains active for this session when storage is unavailable.
+    }
   }, [theme])
 
   const toggle = useCallback(() => {

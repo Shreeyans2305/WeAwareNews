@@ -12,4 +12,4 @@ The read-only public website API is:
 
 Set `VITE_API_BASE_URL` at frontend build time to the Cloud Run API origin. Set `WEAWARE_ALLOWED_ORIGINS` on the API service to the deployed WEAWARE origin (comma-separated for previews). The Vite development server proxies `/api` to `http://localhost:8080` by default. These public reads do not use the automation API key.
 
-The website newsletter subscriptions and podcast/audio playback still use their existing demo flows; article lists shown in those views now come from the public article API.
+Newsletter preference and delivery setup is documented in [NEWSLETTERS.md](../NEWSLETTERS.md). Podcast/audio playback continues to use its existing demo flow.

@@ -1,9 +1,9 @@
 # WeAware API test cost log
 
 - **Testing date:** 2026-10-18
-- **Current user-set test limit:** $7.00 total for testing (supersedes the earlier $5 limit)
+- **Earlier test limit:** $7.00 total for the original placeholder-feed backfill (superseded the earlier $5 limit)
 - **Model:** Vertex AI Gemini 2.5 Flash
-- **Status:** Completed the 14-article backfill. No further Gemini calls are planned.
+- **Status:** The original 14-article placeholder-feed backfill is complete. A later user-authorized expansion toward 10 new articles was stopped after a database connection failure; no further Gemini calls were made.
 
 ## Gemini usage estimates
 
@@ -35,3 +35,25 @@ The pipeline now defaults to a $6.00 tracked-spend ceiling and reserves $0.25 be
 ## Other Google Cloud charges
 
 The API was redeployed to Cloud Run and served local preview requests. Cloud Run, Cloud SQL, and source-build charges are billed separately from Gemini token use. A current billing export was not available during this test, so those charges are **not included** in the model estimate above. Check the Google Cloud Billing report after its normal reporting delay for the invoice-level total. The software spend guard limits tracked Gemini usage; it cannot enforce an invoice-wide billing cap.
+
+## October 18 follow-up backfill
+
+The user authorized 10 additional articles under an approximately $8 cumulative Gemini cap. Ten editor-approved articles are now published, bringing the API total from 13 to 23. After a transient database connection failure, generation resumed with a fresh database connection at each transaction boundary, one Gemini HTTP attempt per request, and a committed $0.25 reserve before every model call. All reserves were released after successful responses; $0.75 remains allocated for ambiguous calls from the interrupted attempts.
+
+| Measure | Value |
+| --- | ---: |
+| New published articles | 10 |
+| Total published articles after this backfill | 23 |
+| Published story estimates | $0.734080 |
+| Editor-rejected candidates | 2 ($0.112925 total) |
+| Health-check calls | $0.000108 |
+| New conservative allowances for ambiguous calls | $0.750000 |
+| Existing tracked spend before this backfill | $1.897293 |
+| Current tracked DB spend, including new allowances | $3.494407 |
+| Earlier allowance for interrupted attempts | $0.750000 |
+| Accounted cumulative estimate | **$4.244407** |
+| Remaining under the $8.00 Gemini cap | **about $3.76** |
+
+Published stories: “Canadian Poet Anne Carson Wins Nobel Prize in Literature” ($0.085782); “Iconic Costume Designer Bob Mackie Dies at 87” ($0.092309); “Supreme Court Allows White House Ballroom Construction to Proceed Amid Legal Challenges” ($0.075883); “French Constitutional Council Blocks Social Media Ban for Under-15s” ($0.073976); “SpaceX Rocket Stage Impacts Moon After Drifting in Space” ($0.087708); “Federal Agents Search Home of US Representative Ilhan Omar Amid Undisclosed Investigation” ($0.070196); “Deadly Attack on King Khalid International Airport in Riyadh Kills 12, Injures Hundreds” ($0.053074); “Mid-Air Incident on Flydubai Flight Leads to Emergency Landing in Saudi Arabia” ($0.073978); “New York Prosecutors Reopen Cornell University Gang-Rape Investigation” ($0.049377); and “Italian Prime Minister Meloni Proposes New Education Policies for Schools” ($0.071797).
+
+Two drafts were rejected by the editorial gate for insufficient independent corroboration. One connection failure left ambiguous request usage; the $0.75 allowance covers the earlier failed attempt and the response whose usage was lost when the database connection closed. The public article API returned HTTP 200 with all 23 published articles. No invoice-level GCP billing data was available; these figures estimate Gemini use only.

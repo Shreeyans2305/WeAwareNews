@@ -8,9 +8,16 @@ Database: Cloud SQL Postgres via Cloud SQL Python Connector + pg8000 (no SQLAlch
 import os
 import json
 import re
+import base64
+import hashlib
+import hmac
+import html
 import logging
+import urllib.request
+import urllib.error
 from contextlib import contextmanager
-from typing import List, Optional
+from datetime import timedelta
+from typing import List, Optional, Literal
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Depends, HTTPException, Header, Response, Query
@@ -30,7 +37,7 @@ _allowed_origins = [origin.strip() for origin in os.getenv("WEAWARE_ALLOWED_ORIG
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(dict.fromkeys(_default_origins + _allowed_origins)),
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -146,6 +153,34 @@ def _load_secrets() -> None:
             """)
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_editorial_articles_publication ON editorial_articles(status, published_at DESC)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_editorial_articles_topic ON editorial_articles(topic, published_at DESC)")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS newsletter_preferences (
+                    firebase_uid TEXT PRIMARY KEY,
+                    email TEXT NOT NULL,
+                    topics TEXT[] NOT NULL DEFAULT '{}',
+                    cadence TEXT NOT NULL CHECK (cadence IN ('daily', 'weekly')),
+                    consented_at TIMESTAMPTZ NOT NULL,
+                    unsubscribed_at TIMESTAMPTZ,
+                    next_delivery_at TIMESTAMPTZ NOT NULL,
+                    last_sent_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_newsletter_due ON newsletter_preferences(next_delivery_at) WHERE unsubscribed_at IS NULL")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS newsletter_deliveries (
+                    delivery_id BIGSERIAL PRIMARY KEY,
+                    firebase_uid TEXT NOT NULL REFERENCES newsletter_preferences(firebase_uid) ON DELETE CASCADE,
+                    window_start TIMESTAMPTZ NOT NULL,
+                    status TEXT NOT NULL CHECK (status IN ('sending', 'sent', 'failed')),
+                    article_ids TEXT[] NOT NULL DEFAULT '{}',
+                    attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    sent_at TIMESTAMPTZ,
+                    error_code TEXT,
+                    UNIQUE(firebase_uid, window_start)
+                )
+            """)
         finally:
             cursor.close()
         conn.commit()
@@ -225,6 +260,12 @@ class StoryResponse(BaseModel):
     source_count: int
     articles: List[Article]
     image_url: Optional[str] = None
+
+
+class NewsletterPreferenceInput(BaseModel):
+    topics: List[str]
+    cadence: Literal["daily", "weekly"]
+    consent: bool
 
 
 # ---------------------------------------------------------------------------
@@ -609,3 +650,252 @@ def current_user(claims: dict = Depends(verify_firebase_user)):
         "photoUrl": claims.get("picture"),
         "provider": firebase_claims.get("sign_in_provider"),
     }
+
+
+def _newsletter_user(claims: dict) -> tuple[str, str]:
+    uid = claims.get("uid") or claims.get("sub")
+    email = claims.get("email")
+    if not uid or not email:
+        raise HTTPException(status_code=403, detail="A verified Firebase email is required")
+    if not claims.get("email_verified"):
+        raise HTTPException(status_code=403, detail="Verify your email address before subscribing")
+    return str(uid), str(email).strip().lower()
+
+
+def _newsletter_unsubscribe_secret() -> Optional[str]:
+    return os.getenv("NEWSLETTER_UNSUBSCRIBE_SECRET")
+
+
+def _newsletter_unsubscribe_token(uid: str) -> str:
+    secret = _newsletter_unsubscribe_secret()
+    if not secret:
+        raise RuntimeError("NEWSLETTER_UNSUBSCRIBE_SECRET is not configured")
+    encoded_uid = base64.urlsafe_b64encode(uid.encode()).decode().rstrip("=")
+    signature = hmac.new(secret.encode(), encoded_uid.encode(), hashlib.sha256).hexdigest()
+    return f"{encoded_uid}.{signature}"
+
+
+def _decode_unsubscribe_token(token: str) -> str:
+    secret = _newsletter_unsubscribe_secret()
+    if not secret or "." not in token:
+        raise HTTPException(status_code=400, detail="Invalid unsubscribe link")
+    encoded_uid, signature = token.rsplit(".", 1)
+    expected = hmac.new(secret.encode(), encoded_uid.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        raise HTTPException(status_code=400, detail="Invalid unsubscribe link")
+    try:
+        return base64.urlsafe_b64decode(encoded_uid + "=" * (-len(encoded_uid) % 4)).decode()
+    except Exception as error:
+        raise HTTPException(status_code=400, detail="Invalid unsubscribe link") from error
+
+
+@app.get("/api/v1/newsletters/preferences")
+def get_newsletter_preferences(claims: dict = Depends(verify_firebase_user), db=Depends(get_db)):
+    uid, email = _newsletter_user(claims)
+    cursor = db.cursor()
+    cursor.execute("""
+        SELECT email, topics, cadence, consented_at, unsubscribed_at, next_delivery_at
+        FROM newsletter_preferences WHERE firebase_uid=%s
+    """, (uid,))
+    row = cursor.fetchone()
+    cursor.close()
+    if not row:
+        return {"subscribed": False, "email": email, "topics": [], "cadence": "weekly", "consentedAt": None}
+    return {
+        "subscribed": row[4] is None,
+        "email": email,
+        "topics": list(row[1] or []),
+        "cadence": row[2],
+        "consentedAt": row[3].isoformat() if row[3] else None,
+        "nextDeliveryAt": row[5].isoformat() if row[5] else None,
+    }
+
+
+@app.put("/api/v1/newsletters/preferences")
+def save_newsletter_preferences(
+    preference: NewsletterPreferenceInput,
+    claims: dict = Depends(verify_firebase_user),
+    db=Depends(get_db),
+):
+    uid, email = _newsletter_user(claims)
+    if not preference.consent:
+        raise HTTPException(status_code=400, detail="Explicit newsletter consent is required")
+    topics = sorted({topic.strip() for topic in preference.topics if topic and topic.strip()})
+    if not topics or len(topics) > 20 or any(len(topic) > 80 for topic in topics):
+        raise HTTPException(status_code=400, detail="Choose between 1 and 20 valid topics")
+    cursor = db.cursor()
+    cursor.execute("SELECT DISTINCT topic FROM editorial_articles WHERE status='published' AND topic IS NOT NULL")
+    available = {row[0].lower(): row[0] for row in cursor.fetchall()}
+    normalized = []
+    for topic in topics:
+        if topic.lower() not in available:
+            cursor.close()
+            raise HTTPException(status_code=400, detail=f"Unknown newsletter topic: {topic}")
+        normalized.append(available[topic.lower()])
+    interval = timedelta(days=1 if preference.cadence == "daily" else 7)
+    cursor.execute("""
+        INSERT INTO newsletter_preferences
+            (firebase_uid, email, topics, cadence, consented_at, unsubscribed_at, next_delivery_at, updated_at)
+        VALUES (%s, %s, %s, %s, NOW(), NULL, NOW() + %s, NOW())
+        ON CONFLICT (firebase_uid) DO UPDATE SET
+            email=EXCLUDED.email, topics=EXCLUDED.topics, cadence=EXCLUDED.cadence,
+            consented_at=NOW(), unsubscribed_at=NULL, next_delivery_at=NOW() + %s,
+            updated_at=NOW()
+        RETURNING email, topics, cadence, consented_at, next_delivery_at
+    """, (uid, email, normalized, preference.cadence, interval, interval))
+    row = cursor.fetchone()
+    db.commit()
+    cursor.close()
+    return {"subscribed": True, "email": row[0], "topics": list(row[1]), "cadence": row[2],
+            "consentedAt": row[3].isoformat(), "nextDeliveryAt": row[4].isoformat()}
+
+
+@app.get("/api/v1/newsletters/unsubscribe")
+@app.post("/api/v1/newsletters/unsubscribe")
+def unsubscribe_newsletter(token: str = Query(..., min_length=20, max_length=512), db=Depends(get_db)):
+    uid = _decode_unsubscribe_token(token)
+    cursor = db.cursor()
+    cursor.execute("UPDATE newsletter_preferences SET unsubscribed_at=COALESCE(unsubscribed_at, NOW()), updated_at=NOW() WHERE firebase_uid=%s", (uid,))
+    db.commit()
+    cursor.close()
+    return Response(
+        content="<!doctype html><html><title>WeAware</title><body style='font:16px Arial,sans-serif;max-width:40rem;margin:4rem auto;padding:1rem'><h1>You are unsubscribed</h1><p>No further WeAware newsletter emails will be sent to this account.</p></body></html>",
+        media_type="text/html",
+    )
+
+
+@app.post("/api/v1/newsletters/preferences/unsubscribe")
+def unsubscribe_from_account(claims: dict = Depends(verify_firebase_user), db=Depends(get_db)):
+    uid, _ = _newsletter_user(claims)
+    cursor = db.cursor()
+    cursor.execute("UPDATE newsletter_preferences SET unsubscribed_at=COALESCE(unsubscribed_at, NOW()), updated_at=NOW() WHERE firebase_uid=%s", (uid,))
+    db.commit()
+    cursor.close()
+    return {"status": "unsubscribed"}
+
+
+def _send_resend_email(to_email: str, subject: str, html_body: str, text_body: str, unsubscribe_url: str, idempotency_key: str) -> None:
+    api_key = os.getenv("RESEND_API_KEY")
+    sender = os.getenv("NEWSLETTER_FROM_EMAIL")
+    if not api_key or not sender:
+        raise RuntimeError("Newsletter delivery is disabled: configure RESEND_API_KEY and NEWSLETTER_FROM_EMAIL")
+    payload = json.dumps({
+        "from": sender,
+        "to": [to_email],
+        "subject": subject,
+        "html": html_body,
+        "text": text_body,
+        "headers": {"List-Unsubscribe": f"<{unsubscribe_url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"},
+    }).encode()
+    request = urllib.request.Request(
+        "https://api.resend.com/emails", data=payload,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "Idempotency-Key": idempotency_key}, method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            if response.status >= 300:
+                raise RuntimeError(f"Resend returned HTTP {response.status}")
+    except urllib.error.HTTPError as error:
+        # Never include response bodies, which can contain recipient/provider data, in logs or DB.
+        raise RuntimeError(f"Resend returned HTTP {error.code}") from error
+
+
+def _newsletter_article_link(article: dict) -> Optional[str]:
+    for source in article.get("sources") or []:
+        if not isinstance(source, dict):
+            continue
+        candidate = source.get("url")
+        if candidate and urlparse(str(candidate)).scheme in ("http", "https"):
+            return str(candidate)
+    return None
+
+
+def _dispatch_newsletters(db, limit: int = 100) -> dict:
+    required_config = ("RESEND_API_KEY", "NEWSLETTER_FROM_EMAIL", "NEWSLETTER_UNSUBSCRIBE_SECRET", "NEWSLETTER_API_ORIGIN")
+    if any(not os.getenv(key) for key in required_config):
+        return {"status": "disabled", "sent": 0, "failed": 0, "reason": "mail_provider_or_unsubscribe_not_configured"}
+    api_origin = os.getenv("NEWSLETTER_API_ORIGIN", "").rstrip("/")
+    cursor = db.cursor()
+    cursor.execute("""
+        SELECT firebase_uid, email, topics, cadence, next_delivery_at, last_sent_at
+        FROM newsletter_preferences
+        WHERE unsubscribed_at IS NULL AND next_delivery_at <= NOW()
+        ORDER BY next_delivery_at
+        FOR UPDATE SKIP LOCKED
+        LIMIT %s
+    """, (limit,))
+    subscribers = cursor.fetchall()
+    sent = failed = 0
+    for uid, email, topics, cadence, due_at, last_sent_at in subscribers:
+        # Exact scheduled due timestamp is the idempotency key. Locking the preference
+        # row serializes concurrent dispatchers; the unique constraint is a second guard.
+        cursor.execute("""
+            INSERT INTO newsletter_deliveries(firebase_uid, window_start, status)
+            VALUES (%s, %s, 'sending')
+            ON CONFLICT (firebase_uid, window_start) DO UPDATE SET
+                status='sending', attempted_at=NOW(), error_code=NULL
+            WHERE newsletter_deliveries.status <> 'sent'
+            RETURNING delivery_id
+        """, (uid, due_at))
+        claim = cursor.fetchone()
+        if not claim:
+            continue
+        delivery_id = claim[0]
+        cursor.execute(f"""
+            SELECT {_ARTICLE_FIELDS} FROM editorial_articles
+            WHERE status='published' AND LOWER(topic)=ANY(%s)
+              AND published_at > COALESCE(%s, NOW() - (%s * INTERVAL '1 day'))
+            ORDER BY published_at DESC NULLS LAST LIMIT 8
+        """, ([topic.lower() for topic in (topics or [])], last_sent_at, 1 if cadence == "daily" else 7))
+        articles = [_article_dict(row) for row in cursor.fetchall()]
+        if not articles:
+            cursor.execute("UPDATE newsletter_deliveries SET status='sent', sent_at=NOW(), article_ids='{}' WHERE delivery_id=%s", (delivery_id,))
+            cursor.execute("""
+                UPDATE newsletter_preferences SET next_delivery_at=NOW() + %s, last_sent_at=NOW(), updated_at=NOW()
+                WHERE firebase_uid=%s
+            """, (timedelta(days=1 if cadence == "daily" else 7), uid))
+            continue
+        try:
+            unsubscribe_url = f"{api_origin}/api/v1/newsletters/unsubscribe?token={_newsletter_unsubscribe_token(uid)}"
+            title = "Your WeAware briefing"
+            rows_html_parts = []
+            rows_text_parts = []
+            for article in articles:
+                headline = html.escape(article["title"])
+                source_url = _newsletter_article_link(article)
+                headline_html = (
+                    f'<a href="{html.escape(source_url, quote=True)}" style="color:#171717;font-size:19px;font-weight:bold">{headline}</a>'
+                    if source_url else f"<strong>{headline}</strong>"
+                )
+                rows_html_parts.append(
+                    f'<li style="margin:0 0 22px">{headline_html}'
+                    f'<p style="color:#555;line-height:1.55">{html.escape(article["summary"])}</p>'
+                    f'<small>{html.escape(article["topic"])} · {article["consensus"]}% consensus · {article["readMins"]} min</small></li>'
+                )
+                rows_text_parts.append("\n".join((article["title"], article["summary"], source_url or "")))
+            rows_html = "".join(rows_html_parts)
+            html_body = f'<div style="max-width:640px;margin:auto;font:16px/1.5 Arial,sans-serif"><h1>WeAware</h1><p>Your {html.escape(cadence)} briefing, based on the topics you chose.</p><ol>{rows_html}</ol><hr><p style="font-size:12px;color:#666">You chose to receive these emails. <a href="{html.escape(unsubscribe_url, quote=True)}">Unsubscribe</a></p></div>'
+            text_body = "WeAware briefing\n\n" + "\n\n".join(rows_text_parts) + f"\n\nUnsubscribe: {unsubscribe_url}"
+            retry_key = hashlib.sha256(f"{uid}:{due_at.isoformat()}".encode()).hexdigest()
+            _send_resend_email(email, title, html_body, text_body, unsubscribe_url, f"weaware-newsletter-{retry_key}")
+            cursor.execute("UPDATE newsletter_deliveries SET status='sent', sent_at=NOW(), article_ids=%s WHERE delivery_id=%s", ([a["id"] for a in articles], delivery_id))
+            cursor.execute("""
+                UPDATE newsletter_preferences SET next_delivery_at=NOW() + %s, last_sent_at=NOW(), updated_at=NOW()
+                WHERE firebase_uid=%s
+            """, (timedelta(days=1 if cadence == "daily" else 7), uid))
+            sent += 1
+        except Exception as error:
+            logger.warning("Newsletter delivery failed (%s)", type(error).__name__)
+            cursor.execute("UPDATE newsletter_deliveries SET status='failed', error_code=%s WHERE delivery_id=%s", (type(error).__name__[:80], delivery_id))
+            failed += 1
+    db.commit()
+    cursor.close()
+    return {"status": "ok", "sent": sent, "failed": failed}
+
+
+@app.post("/api/v1/newsletters/dispatch")
+def dispatch_newsletters(x_newsletter_dispatch_token: Optional[str] = Header(None), db=Depends(get_db)):
+    configured_token = os.getenv("NEWSLETTER_DISPATCH_TOKEN")
+    if not configured_token or not x_newsletter_dispatch_token or not hmac.compare_digest(configured_token, x_newsletter_dispatch_token):
+        raise HTTPException(status_code=401, detail="Invalid scheduler credential")
+    return _dispatch_newsletters(db)

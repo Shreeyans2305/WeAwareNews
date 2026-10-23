@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, Cpu, Leaf, LineChart, Globe2, Sparkles } from 'lucide-react'
 import StoryArtwork from '../StoryArtwork.jsx'
 
@@ -98,6 +98,18 @@ export default function InteractiveSelector({
   const resolved = items ?? toSelectorItems(stories)
   const [activeIndex, setActiveIndex] = useState(0)
   const [animatedOptions, setAnimatedOptions] = useState([])
+  const [isHovered, setIsHovered] = useState(false)
+  const [hasFocus, setHasFocus] = useState(false)
+  const [reduceMotion, setReduceMotion] = useState(() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
+  const pointerActivation = useRef(false)
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)')
+    if (!mediaQuery) return undefined
+    const updateMotionPreference = (event) => setReduceMotion(event.matches)
+    mediaQuery.addEventListener?.('change', updateMotionPreference)
+    return () => mediaQuery.removeEventListener?.('change', updateMotionPreference)
+  }, [])
 
   useEffect(() => {
     setAnimatedOptions([])
@@ -110,6 +122,16 @@ export default function InteractiveSelector({
     return () => timers.forEach((t) => clearTimeout(t))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolved.length])
+
+  useEffect(() => {
+    if (reduceMotion || isHovered || hasFocus || resolved.length < 2) return undefined
+
+    const timer = window.setTimeout(() => {
+      setActiveIndex((index) => (index + 1) % resolved.length)
+    }, 5000)
+
+    return () => window.clearTimeout(timer)
+  }, [activeIndex, hasFocus, isHovered, reduceMotion, resolved.length])
 
   const handleOptionClick = (index) => {
     if (index !== activeIndex) {
@@ -146,6 +168,17 @@ export default function InteractiveSelector({
           role="listbox"
           aria-label="Featured stories"
           className="flex w-full flex-col items-stretch gap-2 overflow-hidden md:h-[400px] md:flex-row md:gap-0"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          onPointerDown={() => { pointerActivation.current = true }}
+          onPointerUp={() => { pointerActivation.current = false }}
+          onPointerCancel={() => { pointerActivation.current = false }}
+          onFocus={() => {
+            if (!pointerActivation.current) setHasFocus(true)
+          }}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setHasFocus(false)
+          }}
         >
           {resolved.map((option, index) => {
             const isActive = activeIndex === index
@@ -157,7 +190,6 @@ export default function InteractiveSelector({
                 role="option"
                 tabIndex={0}
                 aria-selected={isActive}
-                aria-label={`${option.title} — ${option.description ?? ''}`}
                 onClick={() => handleOptionClick(index)}
                 onKeyDown={(e) => handleKeyDown(e, index)}
                 className="option relative flex cursor-pointer flex-col justify-end overflow-hidden transition-all duration-700 ease-in-out focus-visible:outline-2"

@@ -2,32 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Minimal black / white theme — only #000 and #fff (+ opacity). */
+/* Shared semantic theme tokens. */
 :root,
 [data-theme='dark'] {
-  --bg: #000;
-  --fg: #fff;
-  --muted: rgba(255, 255, 255, 0.6);
-  --faint: rgba(255, 255, 255, 0.38);
-  --line: rgba(255, 255, 255, 0.14);
-  --card: #000;
-  --field: #000;
-  --glass-bg: rgba(0, 0, 0, 0.55);
-  --glass-border: rgba(255, 255, 255, 0.12);
-  --hover: rgba(255, 255, 255, 0.08);
+  color-scheme: dark;
+  --bg: #111315;
+  --fg: #f3f2ed;
+  --muted: rgba(243, 242, 237, 0.76);
+  --faint: rgba(243, 242, 237, 0.62);
+  --line: rgba(243, 242, 237, 0.16);
+  --card: #191c1f;
+  --field: #151719;
+  --glass-bg: rgba(17, 19, 21, 0.78);
+  --glass-border: rgba(243, 242, 237, 0.16);
+  --hover: rgba(243, 242, 237, 0.08);
+  --danger: #ff8f86;
+  --success: #75d6a0;
 }
 
 [data-theme='light'] {
-  --bg: #fff;
-  --fg: #000;
-  --muted: rgba(0, 0, 0, 0.58);
-  --faint: rgba(0, 0, 0, 0.38);
-  --line: rgba(0, 0, 0, 0.12);
+  color-scheme: light;
+  --bg: #f7f6f2;
+  --fg: #17191b;
+  --muted: rgba(23, 25, 27, 0.76);
+  --faint: rgba(23, 25, 27, 0.62);
+  --line: rgba(23, 25, 27, 0.14);
   --card: #fff;
   --field: #fff;
-  --glass-bg: rgba(255, 255, 255, 0.65);
-  --glass-border: rgba(0, 0, 0, 0.1);
-  --hover: rgba(0, 0, 0, 0.05);
+  --glass-bg: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(23, 25, 27, 0.12);
+  --hover: rgba(23, 25, 27, 0.05);
+  --danger: #a51d16;
+  --success: #176b3a;
 }
 
 body {
@@ -36,6 +42,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background: var(--bg);
   color: var(--fg);
+  font-size: 16px;
+  line-height: 1.55;
 }
 
 h1,
@@ -58,6 +66,18 @@ h3,
 .t-btn-primary { background: var(--fg); color: var(--bg); border: 1px solid transparent; }
 .t-btn-outline { background: transparent; color: var(--fg); border: 1px solid var(--line); }
 .t-field { background: transparent; color: var(--fg); }
+.auth-error { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.auth-success { color: var(--success); background: color-mix(in srgb, var(--success) 10%, transparent); }
+
+.hero-home {
+  min-height: 100svh;
+  background-image: linear-gradient(180deg, rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0.16) 34%, rgba(0, 0, 0, 0.72)), url('/weaware-poster.jpg');
+  background-position: center;
+  background-size: cover;
+  color: #fff;
+}
+.hero-home .hero-copy { color: #fff; }
+.hero-home .signal-dot { background: #fff; }
 
 /* Minimal glass navbar — frosted, floating, hairline border */
 .glass-nav {
@@ -77,6 +97,9 @@ h3,
   color: var(--muted);
   font-size: 14px;
   font-weight: 500;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
   padding: 6px 2px;
   letter-spacing: -0.01em;
   transition: color 150ms ease;
@@ -93,8 +116,24 @@ h3,
   background: var(--fg);
 }
 
+/* Keep keyboard focus visible and controls comfortable to use. */
+button,
+a,
+input {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline-color: #8fb9ff;
+}
+
 /* Minimal topic row — text only */
 .topic-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
   color: var(--faint);
   font-size: 13px;
   font-weight: 500;
@@ -111,14 +150,27 @@ h3,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   border-radius: 9999px;
   border: 1px solid transparent;
   color: var(--muted);
   transition: color 150ms ease, background 150ms ease;
 }
 .icon-btn:hover { color: var(--fg); background: var(--hover); }
+
+button.t-btn-outline,
+button.t-btn-primary {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+a.t-btn-outline,
+a.t-btn-primary {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+}
 
 .eyebrow-kanit {
   font-family: 'Inter', sans-serif;
@@ -214,16 +266,6 @@ h3,
   50% { transform: scaleY(1); }
 }
 
-/* No hover effects anywhere: neutralize hover transforms, shadows, filters */
-@media (hover: hover) {
-  *:hover {
-    transform: none !important;
-    box-shadow: none !important;
-    text-shadow: none !important;
-    filter: none !important;
-  }
-}
-
 .lift { transform: none; }
 
 /* Newspaper broadsheet utilities */
@@ -238,6 +280,36 @@ h3,
 }
 
 .rule-thick { border-top: 3px solid var(--fg); }
+
+/* Reading rhythm shared by long-form article pages. */
+.article-copy {
+  max-width: 68ch;
+  font-family: 'Source Serif 4', Georgia, serif;
+  font-size: clamp(1.0625rem, 1.2vw, 1.1875rem);
+  line-height: 1.82;
+  letter-spacing: 0.002em;
+}
+
+.article-copy p + p { margin-top: 1.25em; }
+
+.article-section-label {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 .rule-thin { border-top: 1px solid var(--fg); }
 .rule-double-wrap { display: flex; flex-direction: column; gap: 3px; }
 .t-rule { border-color: var(--line); }
@@ -290,6 +362,14 @@ img.newspaper-img { filter: grayscale(1) contrast(1.08); }
   .eq-bar { animation: none; }
   .eq-bar { transform: none; }
   .reveal { opacity: 1; transform: none; transition: opacity 200ms ease; }
+  .hero-media { display: none; }
+}
+
+@supports (padding: env(safe-area-inset-bottom)) {
+  .hero-home > div {
+    min-height: 100svh;
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
+  }
 }
 
 @keyframes fade-only {

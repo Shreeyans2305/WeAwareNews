@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { onAuthStateChanged } from '@firebase/auth'
 import { auth, authConfigured } from './firebase.js'
+import { API_BASE } from '../lib/api.js'
 
 const AuthContext = createContext(null)
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)

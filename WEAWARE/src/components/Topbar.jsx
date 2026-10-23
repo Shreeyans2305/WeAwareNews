@@ -17,7 +17,7 @@ export default function Topbar({ page, onNavigate, activeTopic, onTopic, query, 
 
   return (
     <div className="t-bg sticky top-0 z-30 px-4 pt-3 md:px-8">
-      <header className="glass-nav mx-auto flex max-w-4xl items-center gap-4 rounded-2xl px-4 py-2.5">
+      <header className="glass-nav mx-auto flex max-w-4xl flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-2.5 md:flex-nowrap md:gap-4 md:px-4">
         <button type="button" onClick={onHome} aria-label="Back to WeAware home" className="flex shrink-0 items-center gap-2">
           <img src="/weaware-logo.png" alt="WeAware" className="h-6 w-auto" />
           <span className="font-display text-[15px] font-bold tracking-tight">WeAware</span>
@@ -38,22 +38,7 @@ export default function Topbar({ page, onNavigate, activeTopic, onTopic, query, 
           ))}
         </nav>
 
-        <nav aria-label="Primary mobile" className="flex items-center gap-4 md:hidden">
-          {PAGES.slice(0, 3).map((link) => (
-            <button
-              key={link.id}
-              type="button"
-              onClick={() => onNavigate(link.id)}
-              aria-current={page === link.id ? 'page' : undefined}
-              data-active={page === link.id}
-              className="nav-link"
-            >
-              {link.label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="ml-auto flex items-center gap-1">
+        <div className="order-2 ml-auto flex shrink-0 items-center gap-1 md:order-none">
           {isFeed && (
             <div className="flex items-center gap-2">
               <Search className="t-faint h-4 w-4 shrink-0" />
@@ -62,7 +47,7 @@ export default function Topbar({ page, onNavigate, activeTopic, onTopic, query, 
                 onChange={(e) => onQuery(e.target.value)}
                 placeholder="Search"
                 aria-label="Search stories"
-                className="t-field w-20 bg-transparent text-sm outline-none placeholder:text-[var(--faint)] focus:w-36 md:w-28 md:focus:w-44"
+                className="t-field w-12 bg-transparent text-sm outline-none placeholder:text-[var(--faint)] focus:w-20 md:w-28 md:focus:w-32 lg:focus:w-44"
                 style={{ transition: 'width 200ms ease' }}
               />
             </div>
@@ -77,6 +62,21 @@ export default function Topbar({ page, onNavigate, activeTopic, onTopic, query, 
             {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
         </div>
+
+        <nav aria-label="Primary mobile" className="order-3 flex w-full items-center justify-between gap-1 md:hidden">
+          {PAGES.map((link) => (
+            <button
+              key={link.id}
+              type="button"
+              onClick={() => onNavigate(link.id)}
+              aria-current={page === link.id ? 'page' : undefined}
+              data-active={page === link.id}
+              className="nav-link"
+            >
+              {link.label}
+            </button>
+          ))}
+        </nav>
       </header>
 
       {isFeed && (

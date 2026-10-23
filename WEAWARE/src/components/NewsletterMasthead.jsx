@@ -49,7 +49,12 @@ export default function NewsletterMasthead({ ticker = [] }) {
         </div>
 
         {/* Dateline ticker */}
-        <div className="t-border mt-3 flex items-center gap-6 overflow-x-auto border-b pb-3 text-[12px]">
+        <div
+          role="region"
+          aria-label="Front page updates"
+          tabIndex={0}
+          className="t-border mt-3 flex items-center gap-6 overflow-x-auto border-b pb-3 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2"
+        >
           <span className="t-fg shrink-0 font-semibold uppercase tracking-[0.14em]">Front page</span>
           <span className="t-muted shrink-0">WeAware, Global, {shortDate}</span>
           {ticker.map((t) => (

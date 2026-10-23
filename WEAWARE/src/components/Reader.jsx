@@ -34,12 +34,12 @@ export default function Reader({ story, onBack, onListen, isListening, listening
           Back to feed
         </button>
 
-        <div className="relative">
-          <div className="absolute z-10 mb-8 flex w-[85%] items-center justify-between lg:top-4 md:top-0 sm:-top-2 -top-3">
-            <div className="flex items-center gap-2 text-xl">
-              <span className="signal-dot h-2 w-2 rounded-full" />
-              <TimelineContent as="span" animationNum={0} timelineRef={heroRef} customVariants={revealVariants} className="eyebrow-kanit text-[12px]">
-                {story.topic} • {story.publishedAt}
+        <div>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="signal-dot h-2 w-2 shrink-0 rounded-full" aria-hidden="true" />
+              <TimelineContent as="p" animationNum={0} timelineRef={heroRef} customVariants={revealVariants} className="eyebrow-kanit text-[11px] sm:text-xs">
+                {story.topic} <span className="t-faint px-1" aria-hidden="true">/</span> {story.publishedAt}
               </TimelineContent>
             </div>
             <div className="flex gap-3">
@@ -51,7 +51,7 @@ export default function Reader({ story, onBack, onListen, isListening, listening
                 customVariants={revealVariants}
                 onClick={() => onListen && onListen(story.id)}
                 aria-label={isListening && listeningPlaying ? `Pause audiobook for ${story.title}` : `Listen to ${story.title}`}
-                className="t-btn-outline flex h-8 w-8 items-center justify-center rounded-lg"
+                className="t-btn-outline flex h-10 w-10 items-center justify-center rounded-full"
               >
                 {isListening && listeningPlaying ? <Pause className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
               </TimelineContent>
@@ -63,11 +63,11 @@ export default function Reader({ story, onBack, onListen, isListening, listening
                 customVariants={revealVariants}
                 onClick={() => setShareOpen(true)}
                 aria-label={`Share ${story.title}`}
-                className="t-btn-outline flex h-8 w-8 items-center justify-center rounded-lg"
+                className="t-btn-outline flex h-10 w-10 items-center justify-center rounded-full"
               >
                 <Share2 className="h-4 w-4" />
               </TimelineContent>
-              <TimelineContent as="span" animationNum={3} timelineRef={heroRef} customVariants={revealVariants} className="t-btn-outline hidden h-8 items-center rounded-lg px-3 text-xs font-medium sm:flex">
+              <TimelineContent as="span" animationNum={3} timelineRef={heroRef} customVariants={revealVariants} className="t-btn-outline flex h-10 items-center rounded-full px-3 text-xs font-medium">
                 {story.consensus}% consensus
               </TimelineContent>
             </div>
@@ -116,25 +116,25 @@ export default function Reader({ story, onBack, onListen, isListening, listening
           </div>
         </div>
 
-        <div className="grid gap-8 md:grid-cols-3">
-          <div className="md:col-span-2">
-            <h1 className="mb-6 font-display text-2xl font-extrabold !leading-[110%] tracking-tight sm:text-4xl md:text-5xl">
+        <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-[minmax(0,2fr)_minmax(15rem,0.8fr)] md:gap-12">
+          <div className="min-w-0">
+            <h1 className="mb-5 max-w-[22ch] font-display text-3xl font-extrabold !leading-[1.08] tracking-tight sm:text-4xl md:text-5xl">
               <VerticalCutReveal splitBy="words" staggerDuration={0.06} staggerFrom="first" reverse={true} transition={{ type: 'spring', stiffness: 250, damping: 30, delay: 0.4 }}>
                 {story.title}
               </VerticalCutReveal>
             </h1>
-            <TimelineContent as="p" animationNum={8} timelineRef={heroRef} customVariants={revealVariants} className="t-muted mb-8 font-display text-lg font-medium leading-relaxed md:text-xl">
+            <TimelineContent as="p" animationNum={8} timelineRef={heroRef} customVariants={revealVariants} className="t-muted mb-8 max-w-[62ch] border-l-2 border-[var(--line)] pl-4 font-display text-lg font-medium leading-relaxed md:text-xl">
               {story.summary}
             </TimelineContent>
-            <TimelineContent as="div" animationNum={9} timelineRef={heroRef} customVariants={revealVariants} className="max-w-3xl space-y-5 break-words text-sm sm:text-base [overflow-wrap:anywhere]">
+            <TimelineContent as="div" animationNum={9} timelineRef={heroRef} customVariants={revealVariants} className="article-copy break-words [overflow-wrap:anywhere]">
               {story.body.map((paragraph, i) => (
-                <p key={`body-${i}`} className={`${i === 0 ? '' : 't-muted '}leading-8`}>{paragraph}</p>
+                <p key={`body-${i}`} className="t-muted">{paragraph}</p>
               ))}
             </TimelineContent>
           </div>
 
-          <div className="md:col-span-1">
-            <div className="text-right">
+          <aside className="md:col-span-1">
+            <div className="t-card t-border rounded-2xl border p-5 sm:p-6 md:sticky md:top-28">
               <TimelineContent as="div" animationNum={12} timelineRef={heroRef} customVariants={revealVariants} className="mb-2 font-display text-2xl font-extrabold tracking-tight">
                 WEAWARE
               </TimelineContent>
@@ -151,7 +151,7 @@ export default function Reader({ story, onBack, onListen, isListening, listening
                 timelineRef={heroRef}
                 customVariants={revealVariants}
                 onClick={() => onListen && onListen(story.id)}
-                className="t-btn-primary ml-auto flex w-fit cursor-pointer items-center gap-2 rounded-lg px-5 py-3 font-semibold"
+                className="t-btn-primary flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-5 py-3 font-semibold"
               >
                 {isListening && listeningPlaying ? 'PAUSE AUDIO' : `LISTEN • ${listenMinsFor(story)} MIN`} {isListening && listeningPlaying ? <Pause /> : <ArrowRight />}
               </TimelineContent>
@@ -162,13 +162,13 @@ export default function Reader({ story, onBack, onListen, isListening, listening
                 timelineRef={heroRef}
                 customVariants={revealVariants}
                 onClick={() => setShareOpen(true)}
-                className="t-btn-outline ml-auto mt-3 flex w-fit items-center gap-2 rounded-lg px-5 py-2.5 text-sm"
+                className="t-btn-outline mt-2 flex w-full items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm"
               >
                 <Share2 className="h-4 w-4" /> Share story
               </TimelineContent>
               <p className="t-faint mt-3 text-xs">AI voice • mock audio • weaware.news/s/{story.id}</p>
             </div>
-          </div>
+          </aside>
         </div>
 
         <section className="t-card mt-10 rounded-2xl border p-6">

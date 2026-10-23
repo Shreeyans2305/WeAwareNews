@@ -1,13 +1,8 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
 import { fetchArticle, fetchArticles, fetchTopics, prioritizeStoriesWithImages, toStory } from './lib/api.js'
 import { ThemeProvider, useTheme } from './theme.js'
 import Topbar from './components/Topbar.jsx'
-import FeedGrid from './components/FeedGrid.jsx'
-import Reader from './components/Reader.jsx'
-import NewslettersPage from './components/NewslettersPage.jsx'
-import PodcastsPage from './components/PodcastsPage.jsx'
-import AboutPage from './components/AboutPage.jsx'
 import SiteFooter from './components/SiteFooter.jsx'
 import ListenBar from './components/ListenBar.jsx'
 import ShareSheet from './components/ShareSheet.jsx'
@@ -20,6 +15,12 @@ const NAV_LINKS = [
   { id: 'podcasts', label: 'Podcasts' },
   { id: 'about', label: 'About' },
 ]
+
+const FeedGrid = lazy(() => import('./components/FeedGrid.jsx'))
+const Reader = lazy(() => import('./components/Reader.jsx'))
+const NewslettersPage = lazy(() => import('./components/NewslettersPage.jsx'))
+const PodcastsPage = lazy(() => import('./components/PodcastsPage.jsx'))
+const AboutPage = lazy(() => import('./components/AboutPage.jsx'))
 
 function ThemeToggle() {
   const { theme, toggle } = useTheme()
@@ -39,22 +40,36 @@ function ThemeToggle() {
 
 function Hero({ onNavigate }) {
   const [joined, setJoined] = useState(false)
+  const [reduceMotion, setReduceMotion] = useState(() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
+  const videoRef = useRef(null)
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const updateMotionPreference = (event) => {
+      setReduceMotion(event.matches)
+      if (event.matches) videoRef.current?.pause()
+      else videoRef.current?.play().catch(() => {})
+    }
+    mediaQuery.addEventListener?.('change', updateMotionPreference)
+    return () => mediaQuery.removeEventListener?.('change', updateMotionPreference)
+  }, [])
 
   return (
-    <section className="t-bg relative min-h-screen w-full overflow-hidden">
+    <section className="hero-home t-bg relative min-h-screen w-full overflow-hidden">
       <video
+        ref={videoRef}
         className="hero-media absolute inset-0 h-full w-full object-cover opacity-40"
-        autoPlay
+        autoPlay={!reduceMotion}
         loop
         muted
         playsInline
-        preload="auto"
+        preload={reduceMotion ? 'none' : 'auto'}
         poster="/weaware-poster.jpg"
         src="/intro-preview.mp4"
       />
 
       <div className="relative z-10 flex min-h-screen flex-col px-4 pt-3 md:px-8">
-        <nav aria-label="Primary" className="glass-nav mx-auto flex w-full max-w-4xl items-center gap-4 rounded-2xl px-4 py-2.5">
+        <nav aria-label="Primary" className="glass-nav mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl px-3 py-2.5 md:flex-nowrap md:px-8">
           <button type="button" onClick={() => onNavigate('hero')} aria-label="WeAware home" className="flex shrink-0 items-center gap-2">
             <img src="/weaware-logo.png" alt="WeAware — globe with WEAWARE banner" className="h-6 w-auto" />
             <span className="font-display text-[15px] font-bold tracking-tight">WeAware</span>
@@ -72,8 +87,16 @@ function Hero({ onNavigate }) {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-4 md:hidden">
-            {NAV_LINKS.slice(0, 3).map((link) => (
+          <div className="order-2 ml-auto flex shrink-0 items-center gap-1.5 md:order-none md:gap-2">
+            <AuthControl />
+            <a href="#waitlist" className="t-btn-primary rounded-full px-4 py-1.5 text-[13px] font-medium">
+              Join waitlist
+            </a>
+            <ThemeToggle />
+          </div>
+
+          <div className="order-3 flex w-full items-center justify-between gap-1 md:hidden">
+            {NAV_LINKS.map((link) => (
               <button
                 key={link.id}
                 type="button"
@@ -84,26 +107,18 @@ function Hero({ onNavigate }) {
               </button>
             ))}
           </div>
-
-          <div className="ml-auto flex items-center gap-2">
-            <AuthControl />
-            <a href="#waitlist" className="t-btn-primary rounded-full px-4 py-1.5 text-[13px] font-medium">
-              Join waitlist
-            </a>
-            <ThemeToggle />
-          </div>
         </nav>
 
         <main className="mt-auto flex flex-col justify-end gap-8 px-6 pb-14 md:px-12 md:pb-16">
           <div className="max-w-3xl">
             <div className="hero-rise glass-nav mb-5 inline-flex items-center gap-2 rounded-full px-3.5 py-1.5" style={{ '--i': 0 }}>
               <span className="signal-dot h-1.5 w-1.5 rounded-full" />
-              <span className="eyebrow-kanit text-[12px]">Cross-checked news, with sources shown</span>
+              <span className="hero-copy eyebrow-kanit text-[12px]">Cross-checked news, with sources shown</span>
             </div>
-            <h1 className="hero-rise font-display text-6xl font-extrabold leading-[0.98] tracking-tight md:text-7xl lg:text-[5.4rem]" style={{ '--i': 1 }}>
+            <h1 className="hero-copy hero-rise font-display text-6xl font-extrabold leading-[0.98] tracking-tight md:text-7xl lg:text-[5.4rem]" style={{ '--i': 1 }}>
               News, cross-checked by AI agents, not ranked for outrage.
             </h1>
-            <p className="hero-rise t-muted mt-4 font-display text-lg font-medium md:text-xl" style={{ '--i': 2 }}>
+            <p className="hero-copy hero-rise mt-4 font-display text-lg font-medium md:text-xl" style={{ '--i': 2 }}>
               WeAware cross-references every source, flags disagreement instead of hiding it, and always links back
               to the original reporting.
             </p>
@@ -285,6 +300,7 @@ function Shell() {
         onHome={goHome}
       />
       <main key={`${view}-${activeId ?? 'list'}`}>
+        <Suspense fallback={null}>
         {view === 'feed' && activeStory ? (
           <Reader
             key={activeStory.id}
@@ -318,6 +334,7 @@ function Shell() {
           <PodcastsPage onListen={startListen} currentListenId={listenId} listeningPlaying={listeningPlaying} stories={stories} />
         ) : null}
         {view === 'about' ? <AboutPage onNavigate={navigate} stories={stories} /> : null}
+        </Suspense>
       </main>
       <SiteFooter onNavigate={navigate} current={view} />
       {listenStory ? (

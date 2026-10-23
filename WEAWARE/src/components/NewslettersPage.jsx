@@ -1,80 +1,13 @@
-import { useState } from 'react'
-import { CheckCircle2, MailOpen, Scissors, Send } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { sendEmailVerification } from '@firebase/auth'
+import { CheckCircle2, MailOpen, Scissors } from 'lucide-react'
 import { newsletters } from '../data/editions.js'
+import { useAuth } from '../auth/AuthContext.jsx'
+import { API_BASE } from '../lib/api.js'
 import Reveal from './Reveal.jsx'
 import NewsletterPersonalizer from './NewsletterPersonalizer.jsx'
 import NewsletterMasthead from './NewsletterMasthead.jsx'
 import FrontPageGrid from './FrontPageGrid.jsx'
-
-function SubscribeForm({ id = 'newsletter-email', large = false }) {
-  const [email, setEmail] = useState('')
-  const [status, setStatus] = useState('idle')
-  const [error, setError] = useState('')
-
-  const submit = (e) => {
-    e.preventDefault()
-    const value = email.trim()
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-      setStatus('error')
-      setError('Enter a valid email address to join the list.')
-      return
-    }
-    setStatus('loading')
-    setError('')
-    window.setTimeout(() => setStatus('success'), 800)
-  }
-
-  if (status === 'success') {
-    return (
-      <div role="status" className="t-card t-border flex items-center gap-3 border p-4">
-        <CheckCircle2 className="h-5 w-5 shrink-0" />
-        <div>
-          <p className="text-sm font-medium">You are on the list.</p>
-          <p className="t-muted text-sm">First Crosscheck lands tomorrow morning. No spam, unsubscribe anytime.</p>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <form onSubmit={submit} noValidate className={large ? 'mx-auto mt-6 max-w-xl' : 'mt-4'}>
-      <div className="t-card t-border flex flex-col gap-2 border p-1.5 sm:flex-row sm:items-center">
-        <label htmlFor={id} className="sr-only">
-          Email address
-        </label>
-        <input
-          id={id}
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => {
-            setEmail(e.target.value)
-            if (status === 'error') setStatus('idle')
-          }}
-          placeholder="you@example.com"
-          aria-invalid={status === 'error'}
-          aria-describedby={status === 'error' ? `${id}-error` : undefined}
-          className="t-field w-full flex-1 bg-transparent px-4 py-2.5 text-sm outline-none"
-        />
-        <button
-          type="submit"
-          disabled={status === 'loading'}
-          className="t-btn-primary flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium disabled:opacity-60"
-        >
-          <Send className="h-4 w-4" />
-          {status === 'loading' ? 'Joining…' : 'Subscribe'}
-        </button>
-      </div>
-      {status === 'error' ? (
-        <p id={`${id}-error`} role="alert" className="mt-2 pl-2 text-sm">
-          {error}
-        </p>
-      ) : (
-        <p className="t-faint mt-2 pl-2 text-xs">One email per edition. Read a sample below before you decide.</p>
-      )}
-    </form>
-  )
-}
 
 function SectionHeader({ index, title, blurb }) {
   return (
@@ -92,15 +25,130 @@ function SectionHeader({ index, title, blurb }) {
 }
 
 export default function NewslettersPage({ onOpenStory, stories = [], topics = [] }) {
-  const [subscribed, setSubscribed] = useState(() => new Set(['the-crosscheck']))
+  const { user, configured } = useAuth()
+  const [selectedTopics, setSelectedTopics] = useState([])
+  const [cadence, setCadence] = useState('weekly')
+  const [consent, setConsent] = useState(false)
+  const [isSubscribed, setIsSubscribed] = useState(false)
+  const [preferencesLoading, setPreferencesLoading] = useState(false)
+  const [preferencesSaving, setPreferencesSaving] = useState(false)
+  const [emailVerified, setEmailVerified] = useState(Boolean(user?.emailVerified))
+  const [preferencesMessage, setPreferencesMessage] = useState('')
+  const [preferencesError, setPreferencesError] = useState('')
 
-  const toggle = (id) => {
-    setSubscribed((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
+  useEffect(() => {
+    let cancelled = false
+    if (!user) {
+      setEmailVerified(false)
+      setSelectedTopics([])
+      setCadence('weekly')
+      setConsent(false)
+      setIsSubscribed(false)
+      setPreferencesMessage('')
+      setPreferencesError('')
+      return undefined
+    }
+    setEmailVerified(Boolean(user.emailVerified))
+    setPreferencesLoading(true)
+    user.getIdToken().then((token) => fetch(`${API_BASE}/api/v1/newsletters/preferences`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })).then(async (response) => {
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.detail || `Could not load newsletter settings (${response.status})`)
+      if (cancelled) return
+      setSelectedTopics(payload.topics || [])
+      setCadence(payload.cadence || 'weekly')
+      setConsent(Boolean(payload.subscribed))
+      setIsSubscribed(Boolean(payload.subscribed))
+      setPreferencesError('')
+    }).catch((error) => {
+      if (!cancelled) setPreferencesError(error.message || 'Newsletter settings are unavailable.')
+    }).finally(() => {
+      if (!cancelled) setPreferencesLoading(false)
     })
+    return () => { cancelled = true }
+  }, [user, API_BASE])
+
+  const toggleTopic = (topic) => {
+    setSelectedTopics((current) => current.includes(topic) ? current.filter((item) => item !== topic) : [...current, topic])
+    setPreferencesMessage('')
+  }
+
+  const savePreferences = async () => {
+    setPreferencesError('')
+    setPreferencesMessage('')
+    if (!user) return
+    if (!emailVerified) {
+      setPreferencesError('Verify your email address before subscribing.')
+      return
+    }
+    if (!selectedTopics.length) {
+      setPreferencesError('Choose at least one topic.')
+      return
+    }
+    if (!consent) {
+      setPreferencesError('Check the consent box to receive email briefings.')
+      return
+    }
+    setPreferencesSaving(true)
+    try {
+      const token = await user.getIdToken()
+      const response = await fetch(`${API_BASE}/api/v1/newsletters/preferences`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topics: selectedTopics, cadence, consent: true }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.detail || `Could not save settings (${response.status})`)
+      setIsSubscribed(true)
+      setConsent(true)
+      setPreferencesMessage('Your newsletter preferences are saved.')
+    } catch (error) {
+      setPreferencesError(error.message || 'Could not save newsletter settings.')
+    } finally {
+      setPreferencesSaving(false)
+    }
+  }
+
+  const verifyEmail = async () => {
+    if (!user) return
+    setPreferencesError('')
+    setPreferencesMessage('')
+    try {
+      await sendEmailVerification(user)
+      setPreferencesMessage('Verification email sent. After confirming it, use the button below to refresh your status.')
+    } catch (error) {
+      setPreferencesError(error.message || 'Could not send the verification email.')
+    }
+  }
+
+  const refreshEmailVerification = async () => {
+    if (!user) return
+    await user.reload()
+    setEmailVerified(Boolean(user.emailVerified))
+    setPreferencesMessage(user.emailVerified ? 'Email verified. You can now save your briefing.' : 'Your email is not verified yet. Open the verification email and try again.')
+  }
+
+  const unsubscribe = async () => {
+    if (!user) return
+    setPreferencesSaving(true)
+    setPreferencesError('')
+    setPreferencesMessage('')
+    try {
+      const token = await user.getIdToken()
+      const response = await fetch(`${API_BASE}/api/v1/newsletters/preferences/unsubscribe`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.detail || `Could not unsubscribe (${response.status})`)
+      setIsSubscribed(false)
+      setConsent(false)
+      setPreferencesMessage('You are unsubscribed. You can opt in again any time.')
+    } catch (error) {
+      setPreferencesError(error.message || 'Could not unsubscribe.')
+    } finally {
+      setPreferencesSaving(false)
+    }
   }
 
   const ticker = stories.slice(0, 3).map((s) => ({ id: s.id, title: s.title, consensus: s.consensus }))
@@ -120,11 +168,54 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
       <section aria-label="Choose your section" className="px-6 py-10 md:px-12">
         <div className="mx-auto max-w-6xl">
           <Reveal>
-            <SectionHeader index="B" title="Choose your section" blurb="Three editions. Pick the rhythm that fits your mornings." />
+            <SectionHeader index="B" title="Build your briefing" blurb="Choose the topics you care about and how often you want an email." />
           </Reveal>
+          <div className="t-card t-border mt-8 border p-5 md:p-7">
+            {!configured ? <p className="t-muted text-sm">Sign-in is not configured for this preview.</p> : !user ? (
+              <p className="t-muted text-sm">Sign in from the navigation bar to save newsletter preferences to your account.</p>
+            ) : (
+              <div>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="font-medium">Email delivery for {user.email}</p>
+                    <p className="t-muted mt-1 text-sm">Only published articles matching your selected topics are included.</p>
+                    {!emailVerified && <div className="mt-3 flex flex-wrap items-center gap-2 text-sm"><span className="t-muted">Verify this address before subscribing.</span><button type="button" onClick={verifyEmail} className="t-btn-outline rounded-full px-3 py-1.5 text-xs">Send verification email</button><button type="button" onClick={refreshEmailVerification} className="t-btn-outline rounded-full px-3 py-1.5 text-xs">I have verified</button></div>}
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <span>Send me a briefing</span>
+                    <select value={cadence} onChange={(event) => setCadence(event.target.value)} className="t-field rounded-lg border bg-transparent px-3 py-2">
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                    </select>
+                  </label>
+                </div>
+                <fieldset className="mt-5">
+                  <legend className="text-sm font-medium">Choose topics</legend>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {topics.map((topic) => {
+                      const selected = selectedTopics.includes(topic)
+                      return <button key={topic} type="button" aria-pressed={selected} onClick={() => toggleTopic(topic)} className={`${selected ? 't-btn-primary' : 't-btn-outline'} rounded-full px-4 py-2 text-sm`}>{topic}</button>
+                    })}
+                    {!topics.length && <p className="t-muted text-sm">Topics will appear when published articles are available.</p>}
+                  </div>
+                </fieldset>
+                <label className="t-muted mt-5 flex items-start gap-2 text-sm leading-relaxed">
+                  <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-1" />
+                  <span>I agree to receive WeAware email briefings at the cadence shown. I can unsubscribe at any time.</span>
+                </label>
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <button type="button" onClick={savePreferences} disabled={preferencesLoading || preferencesSaving || !topics.length} className="t-btn-primary rounded-full px-5 py-2.5 text-sm font-medium disabled:opacity-60">
+                    {preferencesLoading ? 'Loading preferences…' : preferencesSaving ? 'Saving…' : isSubscribed ? 'Save preferences' : 'Subscribe to briefing'}
+                  </button>
+                  {isSubscribed && <button type="button" onClick={unsubscribe} disabled={preferencesSaving} className="t-btn-outline rounded-full px-5 py-2.5 text-sm">Unsubscribe</button>}
+                </div>
+                {preferencesError && <p role="alert" className="mt-3 text-sm">{preferencesError}</p>}
+                {preferencesMessage && <p role="status" className="mt-3 flex items-center gap-2 text-sm"><CheckCircle2 className="h-4 w-4" />{preferencesMessage}</p>}
+              </div>
+            )}
+          </div>
           <div className="mt-8 grid grid-cols-1 gap-0 border t-border md:grid-cols-3">
             {newsletters.map((letter, i) => {
-              const active = subscribed.has(letter.id)
               const headlines = letter.sample.split(',').map((h) => h.trim())
               return (
                 <article
@@ -150,18 +241,6 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
                       ))}
                     </ul>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => toggle(letter.id)}
-                    aria-pressed={active}
-                    className={
-                      active
-                        ? 't-btn-primary mt-6 px-5 py-2.5 text-sm font-medium'
-                        : 't-btn-outline mt-6 px-5 py-2.5 text-sm font-medium'
-                    }
-                  >
-                    {active ? 'Subscribed' : `Subscribe to ${letter.name}`}
-                  </button>
                 </article>
               )
             })}
@@ -180,8 +259,7 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
                   Clip and save: your Friday briefing
                 </p>
                 <p className="t-muted mt-2 max-w-2xl text-sm leading-relaxed">
-                  Pick topics once. We mock the email you would get, with consensus kept in and outrage left
-                  out. Saved locally, frontend only.
+                  Preview how selected topics shape a digest. Delivery settings above are saved securely to your signed-in account.
                 </p>
                 <div className="mt-6">
                   <NewsletterPersonalizer stories={stories} topics={topics} />
@@ -234,10 +312,8 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
                   Get the morning paper without the pulp.
                 </h2>
                 <p className="t-muted font-body-serif mx-auto mt-3 max-w-xl text-[15px] leading-relaxed">
-                  One email per edition. Cross-checked stories, source stances, and one flagged claim to read
-                  twice.
+                  Sign in, choose topics, and set daily or weekly delivery. Every message includes an unsubscribe link.
                 </p>
-                <SubscribeForm id="newsletter-email-folio" large />
                 <p className="t-faint mt-6 text-[11px] uppercase tracking-[0.16em]">
                   Set in Newsreader and Source Serif · Composed by WeAware Agents
                 </p>

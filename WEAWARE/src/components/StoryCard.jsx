@@ -34,12 +34,12 @@ export default function StoryCard({ story, featured = false, onOpen, onListen, o
             <span className="t-muted text-xs">{story.consensus}% consensus</span>
           </div>
           <button type="button" onClick={open} className="mt-3 text-left">
-            <span className="font-display text-3xl font-extrabold leading-[1.02] tracking-tight md:text-5xl">
+            <span className="font-display text-3xl font-extrabold leading-[1.08] tracking-tight md:text-4xl">
               {story.title}
             </span>
           </button>
-          <p className="t-muted mt-3 font-display text-base font-medium leading-relaxed md:text-lg">{story.summary}</p>
-          <div className="t-faint mt-5 flex flex-wrap items-center gap-4 text-xs">
+          <p className="t-muted mt-3 max-w-[62ch] font-display text-base font-medium leading-relaxed md:text-lg">{story.summary}</p>
+          <div className="t-muted mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
             <span>{story.sources.length} sources cross-checked</span>
             <span className="flex items-center gap-1">
               <Clock className="h-3.5 w-3.5" />
@@ -88,10 +88,10 @@ export default function StoryCard({ story, featured = false, onOpen, onListen, o
           <span className="t-muted text-xs">{story.consensus}% consensus</span>
         </div>
         <button type="button" onClick={open} className="mt-2.5 text-left">
-          <span className="font-display text-2xl font-bold leading-[1.05] tracking-tight">{story.title}</span>
+          <span className="font-display text-2xl font-bold leading-[1.15] tracking-tight">{story.title}</span>
         </button>
-        <p className="t-muted mt-2 line-clamp-2 font-display text-[15px] font-medium leading-relaxed">{story.summary}</p>
-        <div className="t-faint mt-4 flex items-center gap-3 pt-1 text-xs">
+        <p className="t-muted mt-2 line-clamp-3 font-display text-[15px] font-medium leading-relaxed">{story.summary}</p>
+        <div className="t-muted mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-xs">
           <span>{story.sources.length} sources</span>
           <span className="flex items-center gap-1">
             <Clock className="h-3.5 w-3.5" />

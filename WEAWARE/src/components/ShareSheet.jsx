@@ -1,10 +1,14 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { CheckCircle2, Copy, Link2, Mail, MessageCircle, Send, Share2, X } from 'lucide-react'
+import { useDialogFocus } from '../lib/useDialogFocus.js'
 
 export default function ShareSheet({ story, open, onClose }) {
   const [copied, setCopied] = useState(false)
   const [sent, setSent] = useState(false)
   const [friend, setFriend] = useState('')
+  const dialogRef = useRef(null)
+
+  useDialogFocus(dialogRef, onClose, open && Boolean(story), 'button[aria-label="Close"]')
 
   if (!open || !story) return null
 
@@ -49,8 +53,8 @@ export default function ShareSheet({ story, open, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={`Share ${story.title}`}>
-      <button type="button" aria-label="Close share dialog" onClick={onClose} className="absolute inset-0 bg-black/60" style={{ background: 'rgba(0,0,0,0.6)' }} />
+    <div ref={dialogRef} className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={`Share ${story.title}`} tabIndex={-1}>
+      <button type="button" aria-label="Close share dialog" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-black/60" style={{ background: 'rgba(0,0,0,0.6)' }} />
       <div className="page-enter t-card relative w-full max-w-md overflow-hidden rounded-t-2xl border sm:rounded-2xl">
         <div className="t-border flex items-center gap-2.5 border-b px-5 py-4">
           <Share2 className="h-4 w-4" />

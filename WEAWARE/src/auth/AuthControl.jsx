@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { signInEmail, signInGoogle, registerEmail, sendResetEmail, signOutUser } from './firebase.js'
 import { useAuth } from './AuthContext.jsx'
+import { useDialogFocus } from '../lib/useDialogFocus.js'
 
 function authMessage(error) {
   const code = error?.code || ''
@@ -17,12 +18,15 @@ function authMessage(error) {
 
 function AuthDialog({ onClose }) {
   const { configured } = useAuth()
+  const dialogRef = useRef(null)
   const [mode, setMode] = useState('sign-in')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+
+  useDialogFocus(dialogRef, onClose, true, 'input')
 
   const run = async (action) => {
     setBusy(true)
@@ -55,7 +59,7 @@ function AuthDialog({ onClose }) {
 
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section role="dialog" aria-modal="true" aria-labelledby="auth-title" className="t-card w-full max-w-md rounded-2xl border p-6 shadow-2xl sm:p-8">
+      <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="auth-title" tabIndex={-1} className="t-card w-full max-w-md rounded-2xl border p-6 shadow-2xl sm:p-8">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="eyebrow-kanit t-muted text-xs">WEAWARE ACCOUNT</p>
@@ -93,8 +97,8 @@ function AuthDialog({ onClose }) {
                 <label className="block pt-1 text-sm font-medium" htmlFor="auth-password">Password</label>
                 <input id="auth-password" type="password" required minLength={mode === 'create' ? 8 : undefined} autoComplete={mode === 'create' ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} className="t-field w-full rounded-xl border bg-transparent px-4 py-3 text-sm outline-none" placeholder={mode === 'create' ? 'At least 8 characters' : 'Your password'} />
               </>}
-              {error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</p>}
-              {message && <p role="status" className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">{message}</p>}
+              {error && <p role="alert" className="auth-error rounded-lg px-3 py-2 text-sm">{error}</p>}
+              {message && <p role="status" className="auth-success rounded-lg px-3 py-2 text-sm">{message}</p>}
               <button type="submit" disabled={busy} className="t-btn-primary mt-2 w-full rounded-xl px-4 py-3 text-sm font-semibold disabled:opacity-50">
                 {busy ? 'Please wait…' : mode === 'reset' ? 'Send reset link' : mode === 'create' ? 'Create account' : 'Sign in with email'}
               </button>

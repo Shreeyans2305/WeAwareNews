@@ -1,4 +1,6 @@
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+export const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL || 'https://weaware-api-777322408950.us-central1.run.app'
+).replace(/\/$/, '')
 
 async function request(path, signal) {
   const response = await fetch(`${API_BASE}${path}`, { signal })
