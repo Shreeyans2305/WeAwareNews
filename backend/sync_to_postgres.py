@@ -12,7 +12,7 @@ Usage:
 
 Prerequisites:
   1. Cloud SQL Proxy must be running in another terminal:
-       /opt/homebrew/bin/cloud-sql-proxy project-9ba21d45-1dfd-4108-b69:us-central1:weaware-pg --port=5433 &
+       /opt/homebrew/bin/cloud-sql-proxy weaware:us-central1:weaware-pg --port=5433 &
 
   2. DB password available via Secret Manager (auto-fetched) or DB_PASS env var.
 
@@ -49,7 +49,7 @@ PROXY_HOST = "127.0.0.1"
 PROXY_PORT = 5433
 DB_NAME = "weaware"
 DB_USER = "weaware_user"
-GCP_PROJECT = "project-9ba21d45-1dfd-4108-b69"
+GCP_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "weaware")
 SECRET_NAME = "db-password"
 BATCH_SIZE = 500
 

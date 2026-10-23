@@ -18,7 +18,7 @@ steps:
         chmod +x cloud-sql-proxy
         
         echo "[$(date -u)] Starting cloud-sql-proxy in background..."
-        ./cloud-sql-proxy project-9ba21d45-1dfd-4108-b69:us-central1:weaware-pg --port=5433 &
+        ./cloud-sql-proxy weaware:us-central1:weaware-pg --port=5433 &
         sleep 5
         
         echo "[$(date -u)] Installing Python dependencies..."
@@ -59,7 +59,7 @@ steps:
         
         echo "[$(date -u)] Pipeline completed successfully!"
     env:
-      - 'GOOGLE_CLOUD_PROJECT=project-9ba21d45-1dfd-4108-b69'
+      - 'GOOGLE_CLOUD_PROJECT=weaware'
       - 'GOOGLE_CLOUD_LOCATION=us-central1'
       - 'DB_HOST=127.0.0.1'
       - 'DB_PORT=5433'
