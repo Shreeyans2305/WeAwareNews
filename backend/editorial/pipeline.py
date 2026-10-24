@@ -3,11 +3,13 @@
 import json
 import logging
 import os
+import random
 import re
+import time
 from typing import Any, Optional
 
 from google import genai
-from google.genai import types
+from google.genai import errors, types
 
 logger = logging.getLogger(__name__)
 
@@ -219,9 +221,18 @@ def process_story(conn, client: genai.Client, model: str, story_id: str, run_usa
     call_reserve = float(os.getenv("WEAWARE_GEMINI_CALL_RESERVE_USD", "0.25"))
 
     def request_json(prompt: str, payload: Any) -> dict:
-        if budget_limit > 0 and _tracked_spend(conn) + estimated_cost() + call_reserve > budget_limit:
-            raise RuntimeError("Gemini spend guard reached before next model call")
-        return _json_response(client, model, prompt, payload, usage)
+        for attempt in range(3):
+            if budget_limit > 0 and _tracked_spend(conn) + estimated_cost() + call_reserve > budget_limit:
+                raise RuntimeError("Gemini spend guard reached before next model call")
+            try:
+                return _json_response(client, model, prompt, payload, usage)
+            except errors.APIError as exc:
+                if exc.code != 429 or attempt == 2:
+                    raise
+                delay = min(60, 15 * (2 ** attempt)) + random.uniform(0, 3)
+                logger.warning("Gemini capacity 429; retrying in %.1f seconds", delay)
+                time.sleep(delay)
+        raise AssertionError("unreachable")
 
     try:
         story, sources = _load_story(conn, story_id)
