@@ -126,7 +126,7 @@ def _load_candidate_ids(conn, limit: int) -> list[str]:
                       AND NOT (s.story_id = ANY(%s))
                       AND NOT (s.story_id = ANY(%s))
                       {existing_article_filter}
-                    ORDER BY s.recency DESC, t.india_sources DESC, s.source_count DESC
+                    ORDER BY t.india_sources DESC, s.recency DESC, s.source_count DESC
                     LIMIT %s""",
                 (int(os.getenv("WEAWARE_ARTICLE_MIN_SOURCES", "2")),
                  excluded_story_ids, candidate_ids, india_extra),

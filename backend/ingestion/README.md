@@ -25,9 +25,10 @@ The global editorial shortlist still qualifies stories through independent sourc
 count and source text, then orders by source count and recency. An additive pass
 selects up to five more recent stories with usable text from two independent
 India-based publishers. It runs after the global shortlist, so no globally ranked
-story is removed. This pass considers stories from the last seven days and orders
-them by recency. Publisher location is a coverage signal, not proof that an event
-happened in India. `WEAWARE_ARTICLE_INDIA_EXTRA` controls the additional count.
+story is removed. This pass considers stories from the last seven days and ranks
+them by independent India-based publisher count, then recency. Publisher location
+is a coverage signal, not proof that an event happened in India.
+`WEAWARE_ARTICLE_INDIA_EXTRA` controls the additional count.
 
 ## Polling controls
 
