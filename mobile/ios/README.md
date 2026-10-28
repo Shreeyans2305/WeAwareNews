@@ -37,7 +37,7 @@ A simulator SDK build was validated with Xcode 27.1, then installed and launched
 
 On this Mac, iOS 26.2 repeatedly crashes Apple WebKit during Google sign-in, including inside Safari. Use the installed iPhone 17 Pro running iOS 26.5 for account testing. Restarting 26.2 alone did not resolve it; do not erase user data or loosen Firebase key restrictions as a workaround. The app allows cancelling a pending Google login and times out after three minutes if the system browser never completes. Browser callbacks are matched to their attempt so late callbacks cannot complete a new sign-in.
 
-The iOS 26.5 Google page, cancellation and reopening were smoke tested. Completing account credentials and the authenticated callback still requires a test account.
+The iOS 26.5 Google page, cancellation and reopening were smoke tested. After the signing fix below, the user completed live Google sign-in; the verified account remained signed in after terminating and relaunching the app.
 
 ## Authentication regression tests
 
