@@ -153,3 +153,17 @@ video/scratch/
 *.tfstate.*
 *.tfplan
 *tfplan.txt
+
+
+.obsidian
+
+Markdown
+
+output
+
+tmp
+
+WEAWARE_BLACKBOOK_GUIDE.md
+
+
+WEAWARE_TEST_COSTS.md
