@@ -51,9 +51,14 @@ steps:
         echo "[$(date -u)] STEP 5: Generating reviewed articles (Gemini)..."
         echo "[$(date -u)] ======================================"
         python -m editorial.pipeline
+
+        echo "[$(date -u)] ======================================"
+        echo "[$(date -u)] STEP 6: Drafting podcast script for editorial review..."
+        echo "[$(date -u)] ======================================"
+        python -m editorial.podcast_pipeline
         
         echo "[$(date -u)] ======================================"
-        echo "[$(date -u)] STEP 6: Cleaning up proxy..."
+        echo "[$(date -u)] STEP 7: Cleaning up proxy..."
         echo "[$(date -u)] ======================================"
         pkill cloud-sql-proxy || true
         
