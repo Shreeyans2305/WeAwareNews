@@ -1,8 +1,9 @@
 import { SearchX } from 'lucide-react'
 import StoryCard from './StoryCard.jsx'
+import LockedStoryGrid from './LockedStoryGrid.jsx'
 import InteractiveSelector from './ui/interactive-selector.jsx'
 
-export default function FeedGrid({ stories, resultLabel, onOpen, onListen, onShare, onClear }) {
+export default function FeedGrid({ stories, lockedStories = [], resultLabel, onOpen, onUnlock, onListen, onShare, onClear }) {
   if (stories.length === 0) {
     return (
       <div className="page-enter flex flex-col items-center px-6 py-28 text-center md:px-12">
@@ -33,6 +34,7 @@ export default function FeedGrid({ stories, resultLabel, onOpen, onListen, onSha
           ))}
         </div>
       </div>
+      <LockedStoryGrid stories={lockedStories} onUnlock={onUnlock} />
     </div>
   )
 }

@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CheckCircle2, Copy, Mic, Scissors } from 'lucide-react'
-import { episodes } from '../data/editions.js'
+import { API_BASE, fetchPodcastEpisodes } from '../lib/api.js'
 import Reveal from './Reveal.jsx'
 import ListenAudiobook from './ListenAudiobook.jsx'
 import { PodcastReadingRoom } from './PodcastReadingRoom.jsx'
+import PodcastEditorialReview from './PodcastEditorialReview.jsx'
 
 function SectionHeader({ index, title, blurb }) {
   return (
@@ -22,7 +23,7 @@ function SectionHeader({ index, title, blurb }) {
 
 function FollowFolio({ onPlayLatest }) {
   const [copied, setCopied] = useState(false)
-  const feedUrl = 'https://weaware.news/podcasts/feed.xml'
+  const feedUrl = `${API_BASE}/podcasts/feed.xml`
 
   const copyFeed = async () => {
     try {
@@ -55,8 +56,7 @@ function FollowFolio({ onPlayLatest }) {
           Take the briefing with you.
         </h2>
         <p className="t-muted font-body-serif mx-auto mt-3 max-w-xl text-[15px] leading-relaxed">
-          Copy the demo feed for your podcast app, or start with the latest brief above.
-          Final feed URL ships with launch.
+          Subscribe in your podcast app, or play a published briefing here. New episodes appear in the feed after editorial review.
         </p>
         <div className="mx-auto mt-6 flex max-w-xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-center">
           <button
@@ -78,7 +78,7 @@ function FollowFolio({ onPlayLatest }) {
         {copied ? (
           <p role="status" className="t-muted mt-3 text-xs">Feed URL copied. Paste it in your podcast app.</p>
         ) : (
-          <p className="t-faint mt-3 text-xs">Demo feed only. No signup needed to listen above.</p>
+          <p className="t-faint mt-3 text-xs">Public RSS feed · No signup needed to listen.</p>
         )}
       </div>
     </div>
@@ -86,8 +86,30 @@ function FollowFolio({ onPlayLatest }) {
 }
 
 export default function PodcastsPage({ onListen, currentListenId, listeningPlaying, stories = [] }) {
+  const [episodes, setEpisodes] = useState([])
+  const [selectedEpisodeId, setSelectedEpisodeId] = useState(null)
+  const [episodesLoading, setEpisodesLoading] = useState(true)
+  const [episodesError, setEpisodesError] = useState('')
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchPodcastEpisodes(controller.signal)
+      .then((result) => setEpisodes(result.episodes || []))
+      .catch((error) => {
+        if (error.name !== 'AbortError') setEpisodesError('Podcast episodes are temporarily unavailable.')
+      })
+      .finally(() => setEpisodesLoading(false))
+    return () => controller.abort()
+  }, [])
+
   const scrollToDesk = () => {
     document.getElementById('podcast-desk')?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const handlePublishedEpisodes = (nextEpisodes, episodeId) => {
+    setEpisodes(nextEpisodes)
+    setSelectedEpisodeId(episodeId)
+    scrollToDesk()
   }
 
   return (
@@ -107,7 +129,7 @@ export default function PodcastsPage({ onListen, currentListenId, listeningPlayi
             <div className="rule-thin" />
           </div>
           <p className="stagger-item byline mt-3" style={{ '--i': 4 }}>
-            2 shows · Weekday brief plus Thursday discussion · Sources listed in notes
+            Published episodes · AI narration · Editorial review and sources included
           </p>
         </div>
       </section>
@@ -124,7 +146,7 @@ export default function PodcastsPage({ onListen, currentListenId, listeningPlayi
                 Weekday mornings
               </p>
               <h2 className="headline-serif mt-2 text-3xl">WeAware Daily Brief</h2>
-              <p className="t-muted mt-1 text-xs font-semibold uppercase tracking-[0.14em]">Daily, 15 to 18 min</p>
+              <p className="t-muted mt-1 text-xs font-semibold uppercase tracking-[0.14em]">Daily · about 10 min</p>
               <p className="t-muted font-body-serif mt-3 text-[15px] leading-relaxed">
                 Three stories, consensus scores read aloud, and the one flagged claim to read twice before lunch.
               </p>
@@ -133,14 +155,14 @@ export default function PodcastsPage({ onListen, currentListenId, listeningPlayi
             <article className="stagger-item t-border border-t p-6 md:border-l md:border-t-0 md:p-8" style={{ '--i': 1 }}>
               <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em]">
                 <Mic className="h-4 w-4" aria-hidden="true" />
-                Thursday discussion
+                Weekly discussion
               </p>
               <h2 className="headline-serif mt-2 text-3xl">The Disagreement</h2>
               <p className="t-muted mt-1 text-xs font-semibold uppercase tracking-[0.14em]">Weekly, 21 to 24 min</p>
               <p className="t-muted font-body-serif mt-3 text-[15px] leading-relaxed">
                 One contested story, all source stances on the table, and what would need to change for consensus to move.
               </p>
-              <p className="t-faint mt-4 text-xs uppercase tracking-[0.14em]">New episodes every Thursday</p>
+              <p className="t-faint mt-4 text-xs uppercase tracking-[0.14em]">Weekly discussion format in development</p>
             </article>
           </div>
         </div>
@@ -149,13 +171,21 @@ export default function PodcastsPage({ onListen, currentListenId, listeningPlayi
       <section aria-label="Listening desk" className="px-6 pb-4 md:px-12">
         <div className="mx-auto max-w-6xl">
           <Reveal>
-            <SectionHeader index="C" title="Listening desk" blurb="Mock audio. Every claim links back to original reporting." />
+            <SectionHeader index="C" title="Listening desk" blurb="Scripted, AI-narrated briefings with source notes." />
           </Reveal>
           <Reveal className="mt-8">
             <div id="podcast-desk">
-              <PodcastReadingRoom episodes={episodes} />
+              {episodesError ? <p role="alert" className="t-muted t-card border p-6">{episodesError}</p>
+                : episodesLoading ? <p className="t-muted t-card border p-6">Loading published episodes…</p>
+                  : <PodcastReadingRoom episodes={episodes} selectedEpisodeId={selectedEpisodeId} onEpisodeSelect={setSelectedEpisodeId} />}
             </div>
           </Reveal>
+        </div>
+      </section>
+
+      <section aria-label="Podcast editorial review" className="px-6 pb-8 md:px-12">
+        <div className="mx-auto max-w-6xl">
+          <PodcastEditorialReview onPublished={handlePublishedEpisodes} />
         </div>
       </section>
 
@@ -191,8 +221,8 @@ export default function PodcastsPage({ onListen, currentListenId, listeningPlayi
           <Reveal>
             <SectionHeader index="D" title="From the archive" blurb="Recent episodes. Sources listed in notes." />
           </Reveal>
-          <div className="t-border mt-8 grid grid-cols-1 gap-0 border sm:grid-cols-2 lg:grid-cols-4">
-            {episodes.map((ep, i) => (
+          {episodes.length ? <div className="t-border mt-8 grid grid-cols-1 gap-0 border sm:grid-cols-2 lg:grid-cols-4">
+            {episodes.slice(0, 4).map((ep, i) => (
               <article
                 key={ep.id}
                 className={`p-6 ${i > 0 ? 't-border border-t sm:border-l sm:border-t-0' : ''} ${
@@ -203,16 +233,16 @@ export default function PodcastsPage({ onListen, currentListenId, listeningPlayi
                   {ep.date} · {ep.topic}
                 </p>
                 <h3 className="headline-serif mt-2 text-lg leading-snug">
-                  <button type="button" onClick={scrollToDesk} className="text-left">
+                    <button type="button" onClick={() => { setSelectedEpisodeId(ep.id); scrollToDesk() }} className="text-left">
                     {ep.title}
                   </button>
                 </h3>
                 <p className="t-faint mt-2 text-xs">
-                  {ep.show} · {ep.duration}
+                  {Math.max(1, Math.ceil((ep.durationSeconds || 0) / 60))} min · AI-narrated
                 </p>
               </article>
             ))}
-          </div>
+          </div> : <p className="t-muted t-card mt-8 border p-6 text-center">{episodesLoading ? 'Loading episodes…' : 'New scripted briefings will appear here after editorial approval.'}</p>}
         </div>
       </section>
 

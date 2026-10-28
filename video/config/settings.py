@@ -9,9 +9,9 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     # GCP Environment
-    project_id: str = os.getenv("GOOGLE_CLOUD_PROJECT", "project-9ba21d45-1dfd-4108-b69")
+    project_id: str = os.getenv("GOOGLE_CLOUD_PROJECT", "weaware")
     location: str = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-    gcs_bucket: str = os.getenv("VIDEO_BUCKET_NAME", f"weaware-video-assets-{os.getenv('GOOGLE_CLOUD_PROJECT', 'project-9ba21d45-1dfd-4108-b69')}")
+    gcs_bucket: str = os.getenv("VIDEO_BUCKET_NAME", f"weaware-video-assets-{os.getenv('GOOGLE_CLOUD_PROJECT', 'weaware')}")
 
     # Video Pipeline Durations & Clip Plan
     # Default [8, 8, 8, 8] = 32s (Veo 3.1 discrete durations: 4, 6, 8s)

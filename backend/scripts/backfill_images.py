@@ -32,7 +32,7 @@ def get_image_for_url(url, timeout=10):
 def main():
     print("Initializing...")
     client = secretmanager.SecretManagerServiceClient()
-    project_id = "project-9ba21d45-1dfd-4108-b69"
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "weaware")
     
     # Get DB password
     name = f"projects/{project_id}/secrets/db-password/versions/latest"

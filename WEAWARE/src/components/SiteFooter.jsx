@@ -12,7 +12,7 @@ export default function SiteFooter({ onNavigate, current }) {
         <div className="flex items-center gap-2.5">
           <img src="/weaware-logo.png" alt="WeAware" className="h-6 w-auto" />
           <span className="font-display text-sm font-bold tracking-tight">WeAware</span>
-          <span className="t-faint text-xs">— unbiased news, by design.</span>
+          <span className="t-faint text-xs">— read across the coverage.</span>
         </div>
         <nav aria-label="Footer" className="flex flex-wrap items-center gap-5">
           {links.map((link) => (

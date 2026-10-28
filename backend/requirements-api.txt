@@ -7,3 +7,10 @@ psycopg2-binary>=2.9.9
 cloud-sql-python-connector[pg8000]>=1.5.0
 google-cloud-secret-manager>=2.16.0
 firebase-admin>=6.5.0,<8.0.0
+google-cloud-storage>=2.18.0
+google-cloud-tasks>=2.16.0
+google-cloud-texttospeech>=2.31.0
+google-auth>=2.30.0
+
+# Deterministic, private research PDF exports (fonts ship in research/fonts).
+reportlab>=4.4,<5

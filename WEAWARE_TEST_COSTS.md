@@ -1,5 +1,7 @@
 # WeAware API test cost log
 
+> Historical usage record. The dates, model rates, backfill counts, and limits below describe the October 2026 test runs only; they are not current pricing or production limits. See the service documentation and current provider pricing before estimating a new run.
+
 - **Testing date:** 2026-10-18
 - **Earlier test limit:** $7.00 total for the original placeholder-feed backfill (superseded the earlier $5 limit)
 - **Model:** Vertex AI Gemini 2.5 Flash

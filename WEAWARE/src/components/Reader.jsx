@@ -166,7 +166,7 @@ export default function Reader({ story, onBack, onListen, isListening, listening
               >
                 <Share2 className="h-4 w-4" /> Share story
               </TimelineContent>
-              <p className="t-faint mt-3 text-xs">AI voice • mock audio • weaware.news/s/{story.id}</p>
+              <p className="t-faint mt-3 text-xs">AI-narrated audio • Source notes remain available in the article.</p>
             </div>
           </aside>
         </div>

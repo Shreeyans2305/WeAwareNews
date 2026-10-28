@@ -27,7 +27,7 @@ export default function ListenAudiobook({ stories, currentId, playing, onSelect,
         <div className="min-w-0 flex-1">
           <p className="kicker">Audiobook · Today on the go</p>
           <h2 className="headline-serif mt-1.5 text-2xl leading-tight md:text-[1.7rem]">Hear the top 5, back to back</h2>
-          <p className="byline mt-1.5">{totalMins} min total · AI read crosschecks · Mock audio</p>
+          <p className="byline mt-1.5">About {totalMins} min total · Audio is generated when you start listening</p>
         </div>
         <button type="button" onClick={onPlayAll} className="t-btn-primary px-6 py-2.5 text-sm font-medium">
           Play all

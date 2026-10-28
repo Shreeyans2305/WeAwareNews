@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements-api.txt
 # We only need api/ for the Cloud Run deployment, but we might need ingestion/utils.py if we depend on it.
 # Actually, the api doesn't import from ingestion.
 COPY api/ api/
+COPY research/ research/
 
 ENV PORT=8080
 EXPOSE 8080

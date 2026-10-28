@@ -4,7 +4,7 @@ Phase 0 Smoke Test for Vertex AI Veo, Gemini, and Image Generation.
 
 Budget constraint: FAST tier (veo-3.1-fast-generate-001), 2 clips max (16s total).
 Tests:
-  1. Live model discovery in project-9ba21d45-1dfd-4108-b69, us-central1
+  1. Live model discovery in the configured GCP project, us-central1
   2. Anchor first-frame plate generation using gemini-2.5-flash-image
   3. Generating two 8s 9:16 clips from the identical anchor plate with different spoken lines
   4. Native audio generation (generate_audio=True) and lip-sync assessment
@@ -18,9 +18,9 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 
-PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "project-9ba21d45-1dfd-4108-b69")
+PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "weaware")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-GCS_BUCKET = "project-9ba21d45-1dfd-4108-b69_cloudbuild"
+GCS_BUCKET = os.getenv("CLOUD_BUILD_BUCKET", f"{PROJECT_ID}_cloudbuild")
 
 OUTPUT_DIR = Path("video/scratch")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

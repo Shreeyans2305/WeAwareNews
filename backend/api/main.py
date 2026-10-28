@@ -13,20 +13,27 @@ import hashlib
 import hmac
 import html
 import logging
+import smtplib
+import ssl
+from email.message import EmailMessage
+from email.utils import formatdate
 import urllib.request
 import urllib.error
 from contextlib import contextmanager
-from datetime import timedelta
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Literal
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Depends, HTTPException, Header, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from google.cloud import secretmanager
 from google.cloud.sql.connector import Connector, IPTypes
 import firebase_admin
 from firebase_admin import auth as firebase_auth
+from .newsletter import render_newsletter, newsletter_subject
+from .audio import _audio_url, audio_status, process_audio_task, request_audio
+from fastapi.responses import Response as FastAPIResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -104,6 +111,7 @@ def _is_valid_editorial_image(url: Optional[str]) -> bool:
 
 _secret_client: Optional[secretmanager.SecretManagerServiceClient] = None
 _api_key: Optional[str] = None
+_podcast_editorial_api_key: Optional[str] = None
 _db_pass: Optional[str] = None
 _connector: Optional[Connector] = None
 
@@ -120,9 +128,15 @@ def _get_secret(secret_id: str) -> str:
 
 @app.on_event("startup")
 def _load_secrets() -> None:
-    global _api_key, _db_pass, _connector
+    global _api_key, _podcast_editorial_api_key, _db_pass, _connector
     logger.info("Loading secrets from Secret Manager…")
     _api_key = os.getenv("API_KEY") or _get_secret("api-key")
+    _podcast_editorial_api_key = os.getenv("PODCAST_EDITORIAL_API_KEY")
+    if not _podcast_editorial_api_key:
+        try:
+            _podcast_editorial_api_key = _get_secret("podcast-editorial-api-key")
+        except Exception:
+            logger.warning("Podcast editorial key is not configured; editorial API remains disabled")
     _db_pass = os.getenv("DB_PASS") or _get_secret("db-password")
     _connector = Connector()
     # Safe, additive schema setup for the public article read API.
@@ -153,6 +167,54 @@ def _load_secrets() -> None:
             """)
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_editorial_articles_publication ON editorial_articles(status, published_at DESC)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_editorial_articles_topic ON editorial_articles(topic, published_at DESC)")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS audio_assets (
+                    content_type TEXT NOT NULL CHECK (content_type IN ('article','podcast')),
+                    content_id TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    voice_name TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','ready','failed')),
+                    character_count INTEGER NOT NULL DEFAULT 0,
+                    synthesis_attempts INTEGER NOT NULL DEFAULT 0,
+                    reserved_month DATE NOT NULL DEFAULT date_trunc('month',NOW())::date,
+                    object_name TEXT,
+                    size_bytes BIGINT,
+                    duration_seconds INTEGER,
+                    error_message TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY(content_type, content_id, content_hash, voice_name)
+                )
+            """)
+            cursor.execute("ALTER TABLE audio_assets ADD COLUMN IF NOT EXISTS size_bytes BIGINT")
+            cursor.execute("ALTER TABLE audio_assets ADD COLUMN IF NOT EXISTS duration_seconds INTEGER")
+            cursor.execute("ALTER TABLE audio_assets ADD COLUMN IF NOT EXISTS character_count INTEGER NOT NULL DEFAULT 0")
+            cursor.execute("ALTER TABLE audio_assets ADD COLUMN IF NOT EXISTS synthesis_attempts INTEGER NOT NULL DEFAULT 0")
+            cursor.execute("ALTER TABLE audio_assets ADD COLUMN IF NOT EXISTS reserved_month DATE NOT NULL DEFAULT date_trunc('month',NOW())::date")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS audio_usage (
+                    month_start DATE PRIMARY KEY,
+                    reserved_characters BIGINT NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS podcast_episodes (
+                    episode_id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    topic TEXT NOT NULL DEFAULT 'Daily Brief',
+                    script TEXT NOT NULL,
+                    source_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    estimated_cost_usd NUMERIC(12,8) NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','approved','published')),
+                    published_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
+            cursor.execute("ALTER TABLE podcast_episodes ADD COLUMN IF NOT EXISTS estimated_cost_usd NUMERIC(12,8) NOT NULL DEFAULT 0")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_podcast_episodes_published ON podcast_episodes(status, published_at DESC)")
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS newsletter_preferences (
                     firebase_uid TEXT PRIMARY KEY,
@@ -240,6 +302,14 @@ def verify_api_key(x_api_key: str = Header(None)):
         raise HTTPException(status_code=401, detail="Missing API Key")
     if x_api_key != _api_key:
         raise HTTPException(status_code=401, detail="Invalid API Key")
+    return True
+
+
+def verify_podcast_editorial_key(x_podcast_editorial_key: Optional[str] = Header(None)):
+    if not _podcast_editorial_api_key:
+        raise HTTPException(status_code=503, detail="Podcast editorial access is not configured")
+    if not x_podcast_editorial_key or not hmac.compare_digest(x_podcast_editorial_key, _podcast_editorial_api_key):
+        raise HTTPException(status_code=401, detail="Invalid podcast editorial key")
     return True
 
 
@@ -614,6 +684,180 @@ def list_article_topics(db=Depends(get_db)):
     return {"topics": topics}
 
 
+class PodcastEpisodeDraft(BaseModel):
+    episode_id: str
+    title: str
+    description: str = ""
+    topic: str = "Daily Brief"
+    script: str
+    source_urls: List[str] = Field(default_factory=list)
+
+
+@app.get("/api/v1/articles/{article_id}/audio")
+def get_article_audio(article_id: str, db=Depends(get_db)):
+    """Return article narration state and a short-lived playable URL when ready."""
+    return audio_status(db, "article", article_id)
+
+
+@app.post("/api/v1/articles/{article_id}/audio", status_code=202)
+def request_article_audio(article_id: str, db=Depends(get_db)):
+    """Request narration generation; repeated calls are idempotent."""
+    return request_audio(db, "article", article_id)
+
+
+def _published_podcast_rows(db):
+    cur = db.cursor()
+    try:
+        cur.execute("""SELECT e.episode_id,e.title,e.description,e.topic,e.published_at,a.object_name,a.size_bytes,a.duration_seconds,e.source_urls
+                      FROM podcast_episodes e JOIN audio_assets a ON a.content_type='podcast' AND a.content_id=e.episode_id
+                      WHERE e.status='published' AND a.status='ready' ORDER BY e.published_at DESC LIMIT 100""")
+        return cur.fetchall()
+    finally:
+        cur.close()
+
+
+@app.get("/api/v1/podcasts/episodes")
+def list_podcast_episodes(db=Depends(get_db)):
+    rows = _published_podcast_rows(db)
+    return {"episodes": [
+        {"id": row[0], "title": row[1], "description": row[2], "topic": row[3],
+         "date": row[4].isoformat() if row[4] else None, "audioUrl": _audio_url("podcast", row[5]),
+         "sizeBytes": row[6] or 0, "durationSeconds": row[7] or 0,
+         "sourceUrls": row[8] if isinstance(row[8], list) else json.loads(row[8] or "[]")}
+        for row in rows
+    ]}
+
+
+@app.get("/podcasts/feed.xml")
+def podcast_rss_feed(db=Depends(get_db)):
+    """A public RSS feed containing only fully generated, approved episodes."""
+    rows = _published_podcast_rows(db)
+    base_url = os.getenv("PODCAST_AUDIO_PUBLIC_ORIGIN", "").rstrip("/")
+    if not base_url:
+        bucket = os.getenv("PODCAST_AUDIO_BUCKET", "")
+        base_url = f"https://storage.googleapis.com/{bucket}"
+    escape = html.escape
+    items = []
+    for episode_id, title, description, topic, published_at, object_name, size_bytes, _duration_seconds, source_urls in rows:
+        media_url = f"{base_url}/{object_name}"
+        pub_date = published_at.strftime("%a, %d %b %Y %H:%M:%S GMT") if published_at else ""
+        if isinstance(source_urls, str):
+            source_urls = json.loads(source_urls or "[]")
+        source_notes = "<h3>Sources</h3><ul>" + "".join(
+            f'<li><a href="{html.escape(url, quote=True)}">{html.escape(url)}</a></li>'
+            for url in source_urls if isinstance(url, str) and url.startswith("https://")
+        ) + "</ul>"
+        items.append(
+            "<item>"
+            f"<guid isPermaLink=\"false\">{escape(episode_id)}</guid>"
+            f"<title>{escape(title)}</title><description>{escape(description)}</description>"
+            f"<category>{escape(topic)}</category><pubDate>{pub_date}</pubDate>"
+            f"<content:encoded><![CDATA[{source_notes}]]></content:encoded>"
+            f"<enclosure url=\"{escape(media_url)}\" type=\"audio/mpeg\" length=\"{size_bytes or 0}\"/>"
+            "</item>"
+        )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:content="http://purl.org/rss/1.0/modules/content/">'
+        '<channel><title>WeAware Podcasts</title><link>https://weaware.news/podcasts</link>'
+        '<description>Scripted, cross-checked news briefings from WeAware.</description>'
+        '<language>en</language><itunes:explicit>false</itunes:explicit>'
+        + "".join(items) + "</channel></rss>"
+    )
+    return FastAPIResponse(content=xml, media_type="application/rss+xml; charset=utf-8")
+
+
+@app.post("/api/v1/podcasts/episodes", status_code=202)
+def create_podcast_draft(payload: PodcastEpisodeDraft, auth=Depends(verify_podcast_editorial_key), db=Depends(get_db)):
+    """Internal editorial ingestion. Drafts are invisible until approved and synthesized."""
+    cur = db.cursor()
+    try:
+        cur.execute("""INSERT INTO podcast_episodes(episode_id,title,description,topic,script,source_urls,status)
+                      VALUES (%s,%s,%s,%s,%s,%s::jsonb,'draft')
+                      ON CONFLICT(episode_id) DO UPDATE SET title=EXCLUDED.title,description=EXCLUDED.description,
+                      topic=EXCLUDED.topic,script=EXCLUDED.script,source_urls=EXCLUDED.source_urls,
+                      status='draft',published_at=NULL,updated_at=NOW()""",
+                    (payload.episode_id, payload.title, payload.description, payload.topic,
+                     payload.script, json.dumps(payload.source_urls)))
+        db.commit()
+    finally:
+        cur.close()
+    return {"id": payload.episode_id, "status": "draft"}
+
+
+@app.get("/api/v1/podcasts/episodes/{episode_id}/draft")
+def get_podcast_draft(episode_id: str, auth=Depends(verify_podcast_editorial_key), db=Depends(get_db)):
+    """Read an unpublished script and its references for editorial review."""
+    cur = db.cursor()
+    try:
+        cur.execute("SELECT episode_id,title,description,topic,script,source_urls,status,created_at FROM podcast_episodes WHERE episode_id=%s AND status IN ('draft','approved')", (episode_id,))
+        row = cur.fetchone()
+    finally:
+        cur.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Unpublished podcast draft not found")
+    source_urls = row[5] if isinstance(row[5], list) else json.loads(row[5] or "[]")
+    return {"id": row[0], "title": row[1], "description": row[2], "topic": row[3],
+            "script": row[4], "sourceUrls": source_urls, "status": row[6],
+            "createdAt": row[7].isoformat() if row[7] else None}
+
+
+@app.post("/api/v1/podcasts/episodes/{episode_id}/approve", status_code=202)
+def approve_podcast_episode(episode_id: str, auth=Depends(verify_podcast_editorial_key), db=Depends(get_db)):
+    cur = db.cursor()
+    try:
+        cur.execute("UPDATE podcast_episodes SET status='approved',updated_at=NOW() WHERE episode_id=%s AND status IN ('draft','approved') RETURNING episode_id", (episode_id,))
+        row = cur.fetchone()
+        db.commit()
+    finally:
+        cur.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Draft episode not found")
+    audio = request_audio(db, "podcast", episode_id)
+    return {"id": episode_id, "status": audio["status"]}
+
+
+@app.post("/api/v1/audio/tasks", include_in_schema=False)
+def run_audio_task(payload: dict, authorization: Optional[str] = Header(None), db=Depends(get_db)):
+    """Cloud Tasks target; reject calls that do not carry the configured OIDC identity."""
+    expected_email = os.getenv("AUDIO_TASKS_SERVICE_ACCOUNT")
+    audience = os.getenv("AUDIO_TASKS_AUDIENCE") or os.getenv("AUDIO_TASKS_WORKER_URL")
+    if not expected_email or not audience:
+        raise HTTPException(status_code=503, detail="Audio task authentication is not configured")
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Task identity token required")
+    try:
+        from google.auth.transport.requests import Request
+        from google.oauth2 import id_token
+        claims = id_token.verify_oauth2_token(authorization.split(" ", 1)[1], Request(), audience)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid task identity token") from exc
+    if claims.get("email") != expected_email or not claims.get("email_verified"):
+        raise HTTPException(status_code=403, detail="Unexpected task identity")
+    content_type, content_id, digest = payload.get("contentType"), payload.get("contentId"), payload.get("hash")
+    if content_type not in {"article", "podcast"} or not all(isinstance(v, str) and v for v in (content_id, digest)):
+        raise HTTPException(status_code=400, detail="Malformed audio task")
+    try:
+        process_audio_task(db, content_type, content_id, digest)
+    except Exception as exc:
+        cur = db.cursor()
+        try:
+            cur.execute("UPDATE audio_assets SET status='failed',error_message=%s,updated_at=NOW() WHERE content_type=%s AND content_id=%s AND content_hash=%s", (str(exc)[:1000], content_type, content_id, digest))
+            db.commit()
+        finally:
+            cur.close()
+        logger.exception("Audio generation failed for %s %s", content_type, content_id)
+        raise HTTPException(status_code=500, detail="Audio generation failed; the task may retry") from exc
+    if content_type == "podcast":
+        cur = db.cursor()
+        try:
+            cur.execute("UPDATE podcast_episodes SET status='published',published_at=COALESCE(published_at,NOW()),updated_at=NOW() WHERE episode_id=%s AND status='approved'", (content_id,))
+            db.commit()
+        finally:
+            cur.close()
+    return {"status": "ready"}
+
+
 def verify_firebase_user(authorization: Optional[str] = Header(None)):
     """Verify a Firebase ID token; callers never supply trusted profile fields."""
     if not authorization or not authorization.lower().startswith("bearer "):
@@ -650,6 +894,69 @@ def current_user(claims: dict = Depends(verify_firebase_user)):
         "photoUrl": claims.get("picture"),
         "provider": firebase_claims.get("sign_in_provider"),
     }
+
+
+def _verify_podcast_editor(claims: dict) -> str:
+    """Allow podcast review only for verified Firebase accounts on the editor allowlist."""
+    email = (claims.get("email") or "").strip().lower()
+    if not email or not claims.get("email_verified"):
+        raise HTTPException(status_code=403, detail="A verified Firebase email is required")
+    allowed = {
+        item.strip().lower()
+        for item in os.getenv("PODCAST_EDITOR_EMAILS", "").split(",")
+        if item.strip()
+    }
+    if not allowed or email not in allowed:
+        raise HTTPException(status_code=403, detail="Podcast editorial access is not enabled for this account")
+    return email
+
+
+def _podcast_draft_payload(row) -> dict:
+    source_urls = row[5] if isinstance(row[5], list) else json.loads(row[5] or "[]")
+    return {
+        "id": row[0], "title": row[1], "description": row[2], "topic": row[3],
+        "script": row[4], "sourceUrls": source_urls, "status": row[6],
+        "createdAt": row[7].isoformat() if row[7] else None,
+    }
+
+
+@app.get("/api/v1/editorial/podcasts/drafts")
+def list_editorial_podcast_drafts(
+    claims: dict = Depends(verify_firebase_user), db=Depends(get_db)
+):
+    _verify_podcast_editor(claims)
+    cur = db.cursor()
+    try:
+        cur.execute("""SELECT episode_id,title,description,topic,script,source_urls,status,created_at
+                      FROM podcast_episodes WHERE status='draft' ORDER BY created_at DESC""")
+        rows = cur.fetchall()
+        return {"drafts": [_podcast_draft_payload(row) for row in rows]}
+    finally:
+        cur.close()
+
+
+@app.post("/api/v1/editorial/podcasts/drafts/{episode_id}/approve", status_code=202)
+def approve_editorial_podcast_draft(
+    episode_id: str,
+    claims: dict = Depends(verify_firebase_user),
+    db=Depends(get_db),
+):
+    _verify_podcast_editor(claims)
+    cur = db.cursor()
+    try:
+        cur.execute(
+            """UPDATE podcast_episodes SET status='approved',updated_at=NOW()
+               WHERE episode_id=%s AND status IN ('draft','approved') RETURNING episode_id""",
+            (episode_id,),
+        )
+        row = cur.fetchone()
+        db.commit()
+    finally:
+        cur.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Podcast draft not found")
+    audio = request_audio(db, "podcast", episode_id)
+    return {"id": episode_id, "status": audio["status"]}
 
 
 def _newsletter_user(claims: dict) -> tuple[str, str]:
@@ -689,6 +996,48 @@ def _decode_unsubscribe_token(token: str) -> str:
         raise HTTPException(status_code=400, detail="Invalid unsubscribe link") from error
 
 
+def _newsletter_delivery_ready() -> bool:
+    return all(os.getenv(key) for key in (
+        "NEWSLETTER_SMTP_USER", "NEWSLETTER_SMTP_PASSWORD", "NEWSLETTER_FROM_EMAIL",
+        "NEWSLETTER_UNSUBSCRIBE_SECRET", "NEWSLETTER_API_ORIGIN", "NEWSLETTER_DISPATCH_TOKEN",
+    ))
+
+
+@app.post("/api/v1/newsletters/test")
+def send_newsletter_test(claims: dict = Depends(verify_firebase_user), db=Depends(get_db)):
+    uid, email = _newsletter_user(claims)
+    if not _newsletter_delivery_ready():
+        raise HTTPException(status_code=503, detail="Email delivery is not configured yet. Please contact WeAware.")
+    cursor = db.cursor()
+    try:
+        cursor.execute("SELECT cadence, topics FROM newsletter_preferences WHERE firebase_uid=%s AND unsubscribed_at IS NULL", (uid,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=400, detail="Save your subscription before sending a test email")
+        cursor.execute(f"""SELECT {_ARTICLE_FIELDS} FROM editorial_articles
+            WHERE status='published' AND LOWER(topic)=ANY(%s)
+            ORDER BY published_at DESC NULLS LAST LIMIT 8""",
+            ([topic.lower() for topic in (row[1] or [])],))
+        articles = [_article_dict(article) for article in cursor.fetchall()]
+    finally:
+        cursor.close()
+    if not articles:
+        raise HTTPException(status_code=409, detail="No published stories match your saved topics yet")
+    unsubscribe_url = f"{os.environ['NEWSLETTER_API_ORIGIN'].rstrip('/')}/api/v1/newsletters/unsubscribe?token={_newsletter_unsubscribe_token(uid)}"
+    html_body, text_body = render_newsletter(articles, row[0], unsubscribe_url)
+    # Stable Message-ID helps correlate retries; SMTP does not guarantee deduplication.
+    key = hashlib.sha256(f"{uid}:{email}:{datetime.now(timezone.utc):%Y%m%d%H}".encode()).hexdigest()
+    try:
+        _send_newsletter_email(
+            email, newsletter_subject(row[0]), html_body, text_body,
+            unsubscribe_url, f"weaware-test-{key}",
+        )
+    except Exception as error:
+        logger.warning("Newsletter test failed (%s)", type(error).__name__)
+        raise HTTPException(status_code=502, detail="The email provider could not accept the test email. Please try again later.") from error
+    return {"status": "accepted", "message": "Test email accepted by the email provider. Check your inbox and spam folder. Please allow a few minutes for delivery."}
+
+
 @app.get("/api/v1/newsletters/preferences")
 def get_newsletter_preferences(claims: dict = Depends(verify_firebase_user), db=Depends(get_db)):
     uid, email = _newsletter_user(claims)
@@ -700,8 +1049,9 @@ def get_newsletter_preferences(claims: dict = Depends(verify_firebase_user), db=
     row = cursor.fetchone()
     cursor.close()
     if not row:
-        return {"subscribed": False, "email": email, "topics": [], "cadence": "weekly", "consentedAt": None}
+        return {"deliveryReady": _newsletter_delivery_ready(), "subscribed": False, "email": email, "topics": [], "cadence": "weekly", "consentedAt": None}
     return {
+        "deliveryReady": _newsletter_delivery_ready(),
         "subscribed": row[4] is None,
         "email": email,
         "topics": list(row[1] or []),
@@ -774,30 +1124,28 @@ def unsubscribe_from_account(claims: dict = Depends(verify_firebase_user), db=De
     return {"status": "unsubscribed"}
 
 
-def _send_resend_email(to_email: str, subject: str, html_body: str, text_body: str, unsubscribe_url: str, idempotency_key: str) -> None:
-    api_key = os.getenv("RESEND_API_KEY")
+def _send_newsletter_email(to_email: str, subject: str, html_body: str, text_body: str, unsubscribe_url: str, idempotency_key: str) -> None:
+    username = os.getenv("NEWSLETTER_SMTP_USER")
+    password = os.getenv("NEWSLETTER_SMTP_PASSWORD")
     sender = os.getenv("NEWSLETTER_FROM_EMAIL")
-    if not api_key or not sender:
-        raise RuntimeError("Newsletter delivery is disabled: configure RESEND_API_KEY and NEWSLETTER_FROM_EMAIL")
-    payload = json.dumps({
-        "from": sender,
-        "to": [to_email],
-        "subject": subject,
-        "html": html_body,
-        "text": text_body,
-        "headers": {"List-Unsubscribe": f"<{unsubscribe_url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"},
-    }).encode()
-    request = urllib.request.Request(
-        "https://api.resend.com/emails", data=payload,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "Idempotency-Key": idempotency_key}, method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            if response.status >= 300:
-                raise RuntimeError(f"Resend returned HTTP {response.status}")
-    except urllib.error.HTTPError as error:
-        # Never include response bodies, which can contain recipient/provider data, in logs or DB.
-        raise RuntimeError(f"Resend returned HTTP {error.code}") from error
+    if not username or not password or not sender:
+        raise RuntimeError("Newsletter Gmail delivery is not configured")
+    message = EmailMessage()
+    message["From"] = sender
+    message["To"] = to_email
+    message["Subject"] = subject
+    message["Date"] = formatdate(localtime=False, usegmt=True)
+    message["Reply-To"] = username
+    message["Message-ID"] = f"<{idempotency_key}@gmail.com>"
+    message["List-Unsubscribe"] = f"<{unsubscribe_url}>"
+    message["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+    message.set_content(text_body)
+    message.add_alternative(html_body, subtype="html")
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ssl.create_default_context(), timeout=20) as smtp:
+        smtp.login(username, password.replace(" ", ""))
+        refused = smtp.send_message(message, from_addr=username, to_addrs=[to_email])
+        if refused:
+            raise RuntimeError("Gmail rejected the recipient")
 
 
 def _newsletter_article_link(article: dict) -> Optional[str]:
@@ -811,8 +1159,7 @@ def _newsletter_article_link(article: dict) -> Optional[str]:
 
 
 def _dispatch_newsletters(db, limit: int = 100) -> dict:
-    required_config = ("RESEND_API_KEY", "NEWSLETTER_FROM_EMAIL", "NEWSLETTER_UNSUBSCRIBE_SECRET", "NEWSLETTER_API_ORIGIN")
-    if any(not os.getenv(key) for key in required_config):
+    if not _newsletter_delivery_ready():
         return {"status": "disabled", "sent": 0, "failed": 0, "reason": "mail_provider_or_unsubscribe_not_configured"}
     api_origin = os.getenv("NEWSLETTER_API_ORIGIN", "").rstrip("/")
     cursor = db.cursor()
@@ -857,27 +1204,10 @@ def _dispatch_newsletters(db, limit: int = 100) -> dict:
             continue
         try:
             unsubscribe_url = f"{api_origin}/api/v1/newsletters/unsubscribe?token={_newsletter_unsubscribe_token(uid)}"
-            title = "Your WeAware briefing"
-            rows_html_parts = []
-            rows_text_parts = []
-            for article in articles:
-                headline = html.escape(article["title"])
-                source_url = _newsletter_article_link(article)
-                headline_html = (
-                    f'<a href="{html.escape(source_url, quote=True)}" style="color:#171717;font-size:19px;font-weight:bold">{headline}</a>'
-                    if source_url else f"<strong>{headline}</strong>"
-                )
-                rows_html_parts.append(
-                    f'<li style="margin:0 0 22px">{headline_html}'
-                    f'<p style="color:#555;line-height:1.55">{html.escape(article["summary"])}</p>'
-                    f'<small>{html.escape(article["topic"])} · {article["consensus"]}% consensus · {article["readMins"]} min</small></li>'
-                )
-                rows_text_parts.append("\n".join((article["title"], article["summary"], source_url or "")))
-            rows_html = "".join(rows_html_parts)
-            html_body = f'<div style="max-width:640px;margin:auto;font:16px/1.5 Arial,sans-serif"><h1>WeAware</h1><p>Your {html.escape(cadence)} briefing, based on the topics you chose.</p><ol>{rows_html}</ol><hr><p style="font-size:12px;color:#666">You chose to receive these emails. <a href="{html.escape(unsubscribe_url, quote=True)}">Unsubscribe</a></p></div>'
-            text_body = "WeAware briefing\n\n" + "\n\n".join(rows_text_parts) + f"\n\nUnsubscribe: {unsubscribe_url}"
+            title = newsletter_subject(cadence)
+            html_body, text_body = render_newsletter(articles, cadence, unsubscribe_url)
             retry_key = hashlib.sha256(f"{uid}:{due_at.isoformat()}".encode()).hexdigest()
-            _send_resend_email(email, title, html_body, text_body, unsubscribe_url, f"weaware-newsletter-{retry_key}")
+            _send_newsletter_email(email, title, html_body, text_body, unsubscribe_url, f"weaware-newsletter-{retry_key}")
             cursor.execute("UPDATE newsletter_deliveries SET status='sent', sent_at=NOW(), article_ids=%s WHERE delivery_id=%s", ([a["id"] for a in articles], delivery_id))
             cursor.execute("""
                 UPDATE newsletter_preferences SET next_delivery_at=NOW() + %s, last_sent_at=NOW(), updated_at=NOW()
@@ -899,3 +1229,8 @@ def dispatch_newsletters(x_newsletter_dispatch_token: Optional[str] = Header(Non
     if not configured_token or not x_newsletter_dispatch_token or not hmac.compare_digest(configured_token, x_newsletter_dispatch_token):
         raise HTTPException(status_code=401, detail="Invalid scheduler credential")
     return _dispatch_newsletters(db)
+
+
+# Private research remains disabled until migration and explicit pilot setup.
+from .sherlock import create_router as create_sherlock_router
+app.include_router(create_sherlock_router(get_db, verify_firebase_user))

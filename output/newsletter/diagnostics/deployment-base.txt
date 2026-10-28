@@ -1,0 +1,1 @@
+us-central1-docker.pkg.dev/weaware/cloud-run-source-deploy/weaware-api:crosscheck-illustrated-final-20261028

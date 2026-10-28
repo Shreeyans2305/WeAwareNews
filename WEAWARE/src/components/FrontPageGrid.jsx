@@ -12,9 +12,8 @@ function Byline({ story }) {
 export default function FrontPageGrid({ stories, onOpenStory }) {
   if (!stories || stories.length === 0) return null
   const lead = stories[0]
-  const stackTop = stories[4] ?? stories[1]
-  const stackBottom = stories[6] ?? stories[2]
-  const row = [stories[3], stories[8], stories[9]].filter(Boolean)
+  const stackStories = stories.slice(1, 3)
+  const row = stories.slice(3, 6)
   const leadFlag = lead.flaggedClaims?.[0]
 
   return (
@@ -62,7 +61,7 @@ export default function FrontPageGrid({ stories, onOpenStory }) {
 
           {/* Stack column */}
           <div className="t-border flex flex-col gap-8 border-t pt-8 lg:col-span-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-            {[stackTop, stackBottom].map((s) => (
+            {stackStories.map((s) => (
               <article key={s.id} className="border-b pb-8 last:border-b-0 last:pb-0 t-border">
                 <p className="kicker">{s.topic}</p>
                 <h3 className="headline-serif mt-2 text-2xl">
