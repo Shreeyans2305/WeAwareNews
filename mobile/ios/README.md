@@ -32,3 +32,9 @@ xcodebuild -project mobile/ios/WeAware.xcodeproj -scheme WeAware \
 ```
 
 A simulator SDK build was validated with Xcode 27.1, then installed and launched on an iPhone 17 Pro simulator (iOS 26.2). The live feed loaded articles, images and topics. Public deployed article/topic/podcast payloads were decoded against the Swift models. Firebase identifiers and the Google callback scheme are configured; account-specific operations still need a signed-in test account; Google callback, email delivery, private research access, playback on physical devices and editor approval require end-to-end verification before release. No emails were sent and no research credits or approval actions were consumed during implementation.
+
+## Google sign-in in Simulator
+
+On this Mac, iOS 26.2 repeatedly crashes Apple WebKit during Google sign-in, including inside Safari. Use the installed iPhone 17 Pro running iOS 26.5 for account testing. Restarting 26.2 alone did not resolve it; do not erase user data or loosen Firebase key restrictions as a workaround. The app allows cancelling a pending Google login and times out after three minutes if the system browser never completes. Browser callbacks are matched to their attempt so late callbacks cannot complete a new sign-in.
+
+The iOS 26.5 Google page, cancellation and reopening were smoke tested. Completing account credentials and the authenticated callback still requires a test account.

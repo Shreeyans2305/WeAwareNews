@@ -22,7 +22,7 @@ struct AccountView: View {
                 Button("Reset password") { run { try await account.reset(email: email); message = "Password reset requested. Check your inbox." } }.disabled(email.isEmpty)
             }
         }
-        if busy { ProgressView() }; if !message.isEmpty { Section { Text(message).font(.callout).textSelection(.enabled) } }
+        if busy { ProgressView(); if account.googleSigningIn { Button("Cancel Google sign-in") { account.cancelGoogle() } } }; if !message.isEmpty { Section { Text(message).font(.callout).textSelection(.enabled) } }
         Section("Appearance") { Picker("Theme", selection: $appearance) { Text("System").tag("system"); Text("Light").tag("light"); Text("Dark").tag("dark") } }
         Section("About WeAware") {
             Text("WeAware brings multiple reports together, keeping sources, differences and uncertainty in view so you can make up your own mind.")
@@ -30,7 +30,7 @@ struct AccountView: View {
             Link("Visit WeAware", destination: URL(string: "https://weaware.news")!)
         }
     }.navigationTitle("Account") }
-    func run(_ action: @escaping () async throws -> Void) { busy = true; message = ""; Task { do { try await action() } catch { message = error.localizedDescription }; busy = false } }
+    func run(_ action: @escaping () async throws -> Void) { busy = true; message = ""; Task { do { try await action() } catch is CancellationError { message = "Sign-in cancelled. You can try again." } catch { message = error.localizedDescription }; busy = false } }
 }
 struct NewsletterView: View {
     @EnvironmentObject var account: Account
