@@ -39,4 +39,4 @@ swiftc mobile/ios/WeAware/API.swift mobile/ios/Tests/main.swift -o /tmp/weaware-
 - Configured builds installed and launched on Android and iOS simulators; public feed smoke checked and Android Firebase initialization confirmed.
 - Full Google/email account sign-in and private account actions still require a test account. No passwords, emails, research credits, or editorial actions were used for this security check.
 
-The prior key remains in historical commits but is revoked. This change removes live configs from the current tree without rewriting shared Git history.
+The revoked iOS key was subsequently redacted from all reachable Git history on both remote branches. All remaining objects in the rewritten repository were scanned for the leaked value, and current branch-tip files were verified unchanged. GitHub secret-scanning alert #1 was resolved as revoked. Other clones should be freshly cloned to avoid restoring old history; cached GitHub commit views may require GitHub Support cleanup.
