@@ -154,5 +154,10 @@ video/scratch/
 *.tfplan
 *tfplan.txt
 
-# Mobile validation screenshots and local test reports.
-/output/mobile/
+# Local notes and generated working files
+.obsidian
+Markdown
+output
+tmp
+WEAWARE_BLACKBOOK_GUIDE.md
+WEAWARE_TEST_COSTS.md
