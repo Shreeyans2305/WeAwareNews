@@ -1,0 +1,8 @@
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.build/
+
+# Local previews and unused Firebase reference export.
+screenshots/
+GoogleService-Info.plist

@@ -15,6 +15,7 @@ WeAware is a multi-source news reading product. It groups coverage around storie
 | Path | Purpose |
 | --- | --- |
 | [`WEAWARE/`](WEAWARE/README.md) | React + Vite website |
+| [`mobile/`](mobile/README.md) | Flutter Android and native SwiftUI iOS applications |
 | [`backend/ingestion/`](backend/ingestion/README.md) | Feed polling, normalization, clustering, and extraction |
 | [`backend/editorial/`](backend/editorial/README.md) | Article drafting and editorial review pipeline |
 | [`backend/audio/`](backend/audio/README.md) | Article audio, podcast workflow, and audio infrastructure |
