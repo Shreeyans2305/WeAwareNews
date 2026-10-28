@@ -40,3 +40,9 @@ swiftc mobile/ios/WeAware/API.swift mobile/ios/Tests/main.swift -o /tmp/weaware-
 - Full Google/email account sign-in and private account actions still require a test account. No passwords, emails, research credits, or editorial actions were used for this security check.
 
 The revoked iOS key was subsequently redacted from all reachable Git history on both remote branches. All remaining objects in the rewritten repository were scanned for the leaked value, and current branch-tip files were verified unchanged. GitHub secret-scanning alert #1 was resolved as revoked. Other clones should be freshly cloned to avoid restoring old history; cached GitHub commit views may require GitHub Support cleanup.
+
+## iOS session persistence fix (2026-10-29)
+
+The Google flow reached Firebase successfully, but the unsigned simulator build had no application identifier entitlement. Simulator securityd rejected Keychain writes with `-34018`; the Account screen therefore stayed signed out after Google completed. Simulator builds now use signing (`CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-`). Authentication validates the profile and persists the refresh token before publishing signed-in state; restore and refresh errors are handled explicitly.
+
+Eight hosted authentication tests passed on iOS 26.5, including real Keychain round trips, a simulated Google callback with real secure persistence and profile restoration, failed secure saves, invalid callback state, missing profiles, offline refresh and invalid refresh tokens. Tests also passed without live Firebase configuration. Create-account and sign-in forms were checked in the simulator. Live user sign-in after this fix still needs the user to complete Google's credentials; no production test accounts were created.

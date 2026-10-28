@@ -7,21 +7,25 @@ struct AccountView: View {
     @State private var message = ""; @State private var busy = false
     var body: some View { Form {
         Section { NewsHeading(eyebrow: "Your reading room", title: "Account", subtitle: "Follow the reporting. Keep your preferences.") }
-        if account.signedIn {
+        if account.restoring {
+            Section { ProgressView("Restoring your account…") }
+        } else if account.signedIn {
             Section("Signed in") { Text(account.email); Label(account.verified ? "Email verified" : "Verify your email to use newsletters and Sherlock", systemImage: account.verified ? "checkmark.seal" : "envelope.badge")
                 if !account.verified { Button("Send verification email") { run { try await account.verifyEmail(); message = "Verification email sent." } }; Button("I have verified my email") { run { try await account.reload(); message = account.verified ? "Email verified." : "Email is not verified yet." } } }
                 Button("Sign out", role: .destructive) { account.signOut() }
             }
         } else {
-            Section(register ? "Create an account" : "Welcome back") {
+            Section {
+                Text(register ? "Create your WeAware account" : "Sign in to WeAware").font(.headline).accessibilityIdentifier("auth.mode.title")
                 TextField("Email", text: $email).textContentType(.emailAddress).keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
                 SecureField("Password", text: $password).textContentType(register ? .newPassword : .password)
                 Button(register ? "Create account" : "Sign in") { run { try await account.signIn(email: email, password: password, register: register) } }.disabled(email.isEmpty || password.count < 6 || busy)
                 Button("Continue with Google") { run { try await account.google() } }.disabled(busy)
-                Button(register ? "Already have an account? Sign in" : "Create an account") { register.toggle() }
+                Button(register ? "Already have an account? Sign in" : "Create an account") { register.toggle(); message = ""; password = "" }.disabled(busy).accessibilityIdentifier("auth.mode.switch")
                 Button("Reset password") { run { try await account.reset(email: email); message = "Password reset requested. Check your inbox." } }.disabled(email.isEmpty)
             }
         }
+        if !account.notice.isEmpty { Section { Text(account.notice).font(.callout) } }
         if busy { ProgressView(); if account.googleSigningIn { Button("Cancel Google sign-in") { account.cancelGoogle() } } }; if !message.isEmpty { Section { Text(message).font(.callout).textSelection(.enabled) } }
         Section("Appearance") { Picker("Theme", selection: $appearance) { Text("System").tag("system"); Text("Light").tag("light"); Text("Dark").tag("dark") } }
         Section("About WeAware") {
@@ -29,7 +33,9 @@ struct AccountView: View {
             Text("AI helps cluster coverage, draft summaries and synthesize audio. Published articles and podcasts pass editorial review. Automated signals and summaries can contain errors; inspect the original reporting for important claims.").font(.footnote).foregroundStyle(.secondary)
             Link("Visit WeAware", destination: URL(string: "https://weaware.news")!)
         }
-    }.navigationTitle("Account") }
+    }.navigationTitle("Account").buttonStyle(.borderless)
+        .onChange(of: account.signedIn) { _, signedIn in if signedIn { register = false; password = ""; message = "" } }
+    }
     func run(_ action: @escaping () async throws -> Void) { busy = true; message = ""; Task { do { try await action() } catch is CancellationError { message = "Sign-in cancelled. You can try again." } catch { message = error.localizedDescription }; busy = false } }
 }
 struct NewsletterView: View {

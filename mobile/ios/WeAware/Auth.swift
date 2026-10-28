@@ -4,7 +4,18 @@ import AuthenticationServices
 import CryptoKit
 
 @MainActor final class Account: NSObject, ObservableObject, ASWebAuthenticationPresentationContextProviding {
-    @Published var email = ""; @Published var verified = false; @Published var signedIn = false
+    struct User: Equatable { let id: String; let email: String; let verified: Bool }
+    @Published private(set) var user: User?
+    @Published private(set) var restoring = false
+    @Published private(set) var notice = ""
+    var email: String { user?.email ?? "" }
+    var verified: Bool { user?.verified ?? false }
+    var signedIn: Bool { user != nil }
+    private let googleClientID: String
+    private let googleBrowser: ((URL, String) async throws -> URL)?
+    private let firebaseKey: String
+    private let network: URLSession
+    private let storage: SessionStore
     private var idToken = ""; private var refreshToken = ""; private var expires = Date.distantPast
     @Published private(set) var generation = UUID()
     private var session: ASWebAuthenticationSession?
@@ -59,49 +70,113 @@ import CryptoKit
             }
         }
     }
-    override init() { super.init(); if let data = Keychain.read(), let json = try? JSONSerialization.jsonObject(with: data) as? [String: String] { refreshToken = json["refreshToken"] ?? ""; Task { try? await reload() } } }
-    func firebase(_ operation: String, _ body: [String: Any]) async throws -> [String: Any] {
-        guard !AppConfig.firebaseKey.isEmpty, !AppConfig.firebaseKey.hasPrefix("REPLACE") else { throw APIError(message: "Add your Firebase API key in Config.local.xcconfig to enable sign-in.") }
+    init(network: URLSession = .shared, storage: SessionStore = KeychainSessionStore(), firebaseKey: String = AppConfig.firebaseKey, googleClientID: String = AppConfig.googleClientID, googleBrowser: ((URL, String) async throws -> URL)? = nil, restore: Bool = true) {
+        self.network = network; self.storage = storage; self.firebaseKey = firebaseKey; self.googleBrowser = googleBrowser; self.googleClientID = googleClientID
+        super.init()
+        guard restore else { return }
+        restoring = true
+        Task { await restoreSession() }
+    }
+    func restoreSession() async {
         let expected = generation
-        let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:\(operation)?key=\(AppConfig.firebaseKey)")!
+        restoring = true
+        defer { restoring = false }
+        do {
+            guard let data = try storage.read(),
+                  let json = try JSONSerialization.jsonObject(with: data) as? [String: String],
+                  let refresh = json["refreshToken"], !refresh.isEmpty else { return }
+            guard generation == expected else { return }
+            refreshToken = refresh
+            try await reload()
+        } catch is CancellationError { }
+        catch { if generation == expected { notice = error.localizedDescription } }
+    }
+    func firebase(_ operation: String, _ body: [String: Any]) async throws -> [String: Any] {
+        guard !firebaseKey.isEmpty, !firebaseKey.hasPrefix("REPLACE") else { throw APIError(message: "Add your Firebase API key in Config.local.xcconfig to enable sign-in.") }
+        let expected = generation
+        let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:\(operation)?key=\(firebaseKey)")!
         let request = try FirebaseAuthRequest.make(url: url, body: body)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await network.data(for: request)
         guard generation == expected else { throw CancellationError() }
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw APIError(message: (json["error"] as? [String: Any])?["message"] as? String ?? "Authentication failed.") }
         return json
     }
-    private func accept(_ json: [String: Any]) throws {
-        guard let token = json["idToken"] as? String, let refresh = json["refreshToken"] as? String else { throw APIError(message: "The sign-in response was incomplete.") }
-        generation = UUID(); idToken = token; refreshToken = refresh; expires = Date().addingTimeInterval(3500)
-        try Keychain.save(JSONSerialization.data(withJSONObject: ["refreshToken": refresh])); signedIn = true
+    private func completeSignIn(_ json: [String: Any]) async throws {
+        guard let token = json["idToken"] as? String, !token.isEmpty,
+              let refresh = json["refreshToken"] as? String, !refresh.isEmpty else {
+            throw APIError(message: "The sign-in response was incomplete. Please try again.")
+        }
+        let expected = generation
+        let profile = try await firebase("lookup", ["idToken": token])
+        let nextUser = try Self.profile(profile)
+        guard generation == expected else { throw CancellationError() }
+        // Persist first. A failed Keychain write must not leave a half-signed-in account.
+        try storage.save(JSONSerialization.data(withJSONObject: ["refreshToken": refresh]))
+        idToken = token; refreshToken = refresh
+        expires = Date().addingTimeInterval(TimeInterval(json["expiresIn"] as? String ?? "3600") ?? 3600).addingTimeInterval(-60)
+        notice = ""; user = nextUser; generation = UUID()
+    }
+    private static func profile(_ json: [String: Any]) throws -> User {
+        guard let profile = (json["users"] as? [[String: Any]])?.first,
+              let id = profile["localId"] as? String, !id.isEmpty,
+              let email = profile["email"] as? String, !email.isEmpty else {
+            throw APIError(message: "Your account details could not be loaded. Please sign in again.")
+        }
+        return User(id: id, email: email, verified: profile["emailVerified"] as? Bool ?? false)
     }
     func signIn(email: String, password: String, register: Bool) async throws {
-        try accept(await firebase(register ? "signUp" : "signInWithPassword", ["email": email.trimmingCharacters(in: .whitespaces), "password": password, "returnSecureToken": true]))
-        try await reload(); if register { try await verifyEmail() }
+        notice = ""
+        let result = try await firebase(register ? "signUp" : "signInWithPassword", ["email": email.trimmingCharacters(in: .whitespacesAndNewlines), "password": password, "returnSecureToken": true])
+        try await completeSignIn(result)
+        if register {
+            do { try await verifyEmail() }
+            catch { notice = "Account created. Verification email could not be sent; use Send verification email to retry." }
+        }
     }
     func token() async throws -> String {
         if expires > Date() { return idToken }
         guard !refreshToken.isEmpty else { throw APIError(message: "Sign in to continue.") }
         let expected = generation
         let request = try FirebaseAuthRequest.make(
-            url: URL(string: "https://securetoken.googleapis.com/v1/token?key=\(AppConfig.firebaseKey)")!,
+            url: URL(string: "https://securetoken.googleapis.com/v1/token?key=\(firebaseKey)")!,
             body: ["grant_type": "refresh_token", "refresh_token": refreshToken]
         )
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await network.data(for: request)
         guard generation == expected else { throw CancellationError() }
-        guard (response as? HTTPURLResponse)?.statusCode == 200, let json = try JSONSerialization.jsonObject(with: data) as? [String: Any], let token = json["id_token"] as? String else { signOut(); throw APIError(message: "Your session expired. Sign in again.") }
-        idToken = token; expires = Date().addingTimeInterval(3500); signedIn = true
-        if let refresh = json["refresh_token"] as? String { refreshToken = refresh; try Keychain.save(JSONSerialization.data(withJSONObject: ["refreshToken": refresh])) }
+        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        guard (response as? HTTPURLResponse)?.statusCode == 200,
+              let token = json["id_token"] as? String else {
+            let reason = (json["error"] as? [String: Any])?["message"] as? String ?? ""
+            if ["TOKEN_EXPIRED", "INVALID_REFRESH_TOKEN", "USER_DISABLED", "USER_NOT_FOUND"].contains(reason) { signOut() }
+            throw APIError(message: "Your session could not be refreshed. Please try again or sign in again.")
+        }
+        let refresh = json["refresh_token"] as? String ?? refreshToken
+        try storage.save(JSONSerialization.data(withJSONObject: ["refreshToken": refresh]))
+        idToken = token; refreshToken = refresh; expires = Date().addingTimeInterval(3500)
         return token
     }
-    func reload() async throws { expires = .distantPast; let json = try await firebase("lookup", ["idToken": token()]); if let user = (json["users"] as? [[String: Any]])?.first { email = user["email"] as? String ?? ""; verified = user["emailVerified"] as? Bool ?? false; signedIn = true } }
+    func reload() async throws {
+        let expected = generation
+        expires = .distantPast
+        let token = try await token()
+        let json = try await firebase("lookup", ["idToken": token])
+        let nextUser = try Self.profile(json)
+        guard generation == expected else { throw CancellationError() }
+        let changedAccount = user?.id != nextUser.id
+        user = nextUser; notice = ""
+        if changedAccount { generation = UUID() }
+    }
     func verifyEmail() async throws { _ = try await firebase("sendOobCode", ["requestType": "VERIFY_EMAIL", "idToken": token()]) }
-    func reset(email: String) async throws { _ = try await firebase("sendOobCode", ["requestType": "PASSWORD_RESET", "email": email]) }
-    func signOut() { generation = UUID(); cancelGoogle(); idToken = ""; refreshToken = ""; email = ""; verified = false; signedIn = false; expires = .distantPast; Keychain.delete() }
+    func reset(email: String) async throws { _ = try await firebase("sendOobCode", ["requestType": "PASSWORD_RESET", "email": email.trimmingCharacters(in: .whitespacesAndNewlines)]) }
+    func signOut() {
+        generation = UUID(); cancelGoogle(); user = nil
+        idToken = ""; refreshToken = ""; expires = .distantPast; notice = ""
+        do { try storage.delete() } catch { notice = error.localizedDescription }
+    }
     func google() async throws {
         let expected = generation
-        let client = AppConfig.googleClientID
+        let client = googleClientID
         guard !client.isEmpty, !client.hasPrefix("REPLACE") else { throw APIError(message: "Configure the Google iOS client ID and callback scheme in Xcode to enable Google sign-in.") }
         let scheme = client.components(separatedBy: ".").reversed().joined(separator: ".")
         let redirect = "\(scheme):/oauthredirect"; let verifier = UUID().uuidString + UUID().uuidString
@@ -109,23 +184,53 @@ import CryptoKit
         let state = UUID().uuidString
         var components = URLComponents(string: "https://accounts.google.com/o/oauth2/v2/auth")!
         components.queryItems = ["client_id": client, "redirect_uri": redirect, "response_type": "code", "scope": "openid email profile", "code_challenge": challenge, "code_challenge_method": "S256", "state": state].map { URLQueryItem(name: $0.key, value: $0.value) }
-        let callback = try await openGoogle(components.url!, scheme: scheme)
+        let callback: URL
+        if let googleBrowser { callback = try await googleBrowser(components.url!, scheme) }
+        else { callback = try await openGoogle(components.url!, scheme: scheme) }
         guard generation == expected else { throw CancellationError() }
         let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
         guard items.first(where: { $0.name == "state" })?.value == state, let code = items.first(where: { $0.name == "code" })?.value else { throw APIError(message: "Google sign-in could not be verified.") }
         var request = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!); request.httpMethod = "POST"; request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         var form = URLComponents(); form.queryItems = ["client_id": client, "redirect_uri": redirect, "code": code, "code_verifier": verifier, "grant_type": "authorization_code"].map { URLQueryItem(name: $0.key, value: $0.value) }; request.httpBody = form.percentEncodedQuery?.data(using: .utf8)
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await network.data(for: request)
         guard generation == expected else { throw CancellationError() }
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any], let googleToken = json["id_token"] as? String else { throw APIError(message: "Google did not return a valid identity.") }
         var post = URLComponents(); post.queryItems = [URLQueryItem(name: "id_token", value: googleToken), URLQueryItem(name: "providerId", value: "google.com")]
-        try accept(await firebase("signInWithIdp", ["postBody": post.percentEncodedQuery ?? "", "requestUri": "http://localhost", "returnSecureToken": true])); try await reload()
+        let result = try await firebase("signInWithIdp", ["postBody": post.percentEncodedQuery ?? "", "requestUri": "http://localhost", "returnSecureToken": true])
+        try await completeSignIn(result)
     }
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor { UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first ?? ASPresentationAnchor() }
 }
-enum Keychain {
-    static let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.weaware.ios.session", kSecAttrAccount as String: "firebase"]
-    static func read() -> Data? { var query = base; query[kSecReturnData as String] = true; query[kSecMatchLimit as String] = kSecMatchLimitOne; var result: CFTypeRef?; guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else { return nil }; return result as? Data }
-    static func save(_ data: Data) throws { delete(); var query = base; query[kSecValueData as String] = data; query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly; guard SecItemAdd(query as CFDictionary, nil) == errSecSuccess else { throw APIError(message: "Could not securely save the session.") } }
-    static func delete() { SecItemDelete(base as CFDictionary) }
+protocol SessionStore {
+    func read() throws -> Data?
+    func save(_ data: Data) throws
+    func delete() throws
+}
+struct KeychainSessionStore: SessionStore {
+    var service = "com.weaware.ios.session"
+    private var query: [String: Any] { [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: "firebase"] }
+    func read() throws -> Data? {
+        var request = query; request[kSecReturnData as String] = true; request[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(request as CFDictionary, &result)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess else { throw failure(status) }
+        return result as? Data
+    }
+    func save(_ data: Data) throws {
+        let attributes: [String: Any] = [kSecValueData as String: data, kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            var item = query; attributes.forEach { item[$0.key] = $0.value }
+            status = SecItemAdd(item as CFDictionary, nil)
+        }
+        guard status == errSecSuccess else { throw failure(status) }
+    }
+    func delete() throws {
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw failure(status) }
+    }
+    private func failure(_ status: OSStatus) -> APIError {
+        APIError(message: "Secure session storage is unavailable (\(status)). Please reopen the app or install a correctly signed build.")
+    }
 }

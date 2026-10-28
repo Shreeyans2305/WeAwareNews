@@ -28,7 +28,7 @@ For physical device builds select your Apple development team in Signing & Capab
 ```sh
 xcodebuild -project mobile/ios/WeAware.xcodeproj -scheme WeAware \
   -sdk iphonesimulator -configuration Debug \
-  -derivedDataPath /tmp/weaware-ios-build CODE_SIGNING_ALLOWED=NO build
+  -derivedDataPath /tmp/weaware-ios-build CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- build
 ```
 
 A simulator SDK build was validated with Xcode 27.1, then installed and launched on an iPhone 17 Pro simulator (iOS 26.2). The live feed loaded articles, images and topics. Public deployed article/topic/podcast payloads were decoded against the Swift models. Firebase identifiers and the Google callback scheme are configured; account-specific operations still need a signed-in test account; Google callback, email delivery, private research access, playback on physical devices and editor approval require end-to-end verification before release. No emails were sent and no research credits or approval actions were consumed during implementation.
@@ -38,3 +38,16 @@ A simulator SDK build was validated with Xcode 27.1, then installed and launched
 On this Mac, iOS 26.2 repeatedly crashes Apple WebKit during Google sign-in, including inside Safari. Use the installed iPhone 17 Pro running iOS 26.5 for account testing. Restarting 26.2 alone did not resolve it; do not erase user data or loosen Firebase key restrictions as a workaround. The app allows cancelling a pending Google login and times out after three minutes if the system browser never completes. Browser callbacks are matched to their attempt so late callbacks cannot complete a new sign-in.
 
 The iOS 26.5 Google page, cancellation and reopening were smoke tested. Completing account credentials and the authenticated callback still requires a test account.
+
+## Authentication regression tests
+
+Simulator builds must keep signing enabled. Disabling it omitted the simulator application identifier entitlement and caused Keychain error `-34018` after otherwise successful Google authentication. The Account model now publishes a signed-in profile only after profile validation and secure persistence succeed. Existing session data is updated without deleting it first, startup restoration errors are visible, and temporary refresh failures preserve the current account.
+
+```sh
+xcodebuild -project mobile/ios/WeAware.xcodeproj -scheme WeAware \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' \
+  -derivedDataPath /tmp/weaware-ios-signed \
+  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test
+```
+
+These hosted tests exercise real simulator Keychain save/update/read/delete and use intercepted network responses for session transitions, persistence failure, restoration, and refresh errors. They do not create production accounts or send email.
