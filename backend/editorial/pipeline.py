@@ -39,6 +39,19 @@ CREATE INDEX IF NOT EXISTS idx_editorial_articles_publication
     ON editorial_articles(status, published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_editorial_articles_topic
     ON editorial_articles(topic, published_at DESC);
+CREATE TABLE IF NOT EXISTS podcast_episodes (
+    episode_id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    topic TEXT NOT NULL DEFAULT 'Daily Brief',
+    script TEXT NOT NULL,
+    source_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
+    estimated_cost_usd NUMERIC(12,8) NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','approved','published')),
+    published_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 INTERNAL_SOURCE_REFS = re.compile(r"\[(?:[0-9a-f]{40,64}(?:\s*,\s*)?)+\]", re.IGNORECASE)
@@ -139,7 +152,9 @@ def _load_candidate_ids(conn, limit: int) -> list[str]:
 
 def _tracked_spend(conn) -> float:
     with conn.cursor() as cur:
-        cur.execute("SELECT COALESCE(SUM(estimated_cost_usd), 0) FROM editorial_articles")
+        cur.execute("""SELECT
+                     (SELECT COALESCE(SUM(estimated_cost_usd),0) FROM editorial_articles) +
+                     (SELECT COALESCE(SUM(estimated_cost_usd),0) FROM podcast_episodes)""")
         total = float(cur.fetchone()[0] or 0)
     # End the read transaction before waiting on the next remote Gemini call.
     conn.commit()

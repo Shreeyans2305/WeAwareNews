@@ -1,7 +1,7 @@
 variable "project_id" {
   type        = string
   description = "GCP Project ID"
-  default     = "project-9ba21d45-1dfd-4108-b69"
+  default     = "weaware"
 }
 
 variable "region" {

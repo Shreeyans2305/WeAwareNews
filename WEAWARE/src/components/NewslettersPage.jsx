@@ -8,6 +8,7 @@ import Reveal from './Reveal.jsx'
 import NewsletterPersonalizer from './NewsletterPersonalizer.jsx'
 import NewsletterMasthead from './NewsletterMasthead.jsx'
 import FrontPageGrid from './FrontPageGrid.jsx'
+import LockedStoryGrid from './LockedStoryGrid.jsx'
 
 function SectionHeader({ index, title, blurb }) {
   return (
@@ -25,9 +26,10 @@ function SectionHeader({ index, title, blurb }) {
 }
 
 export default function NewslettersPage({ onOpenStory, stories = [], topics = [] }) {
-  const { user, configured } = useAuth()
+  const { user, configured, requestSignIn } = useAuth()
   const [selectedTopics, setSelectedTopics] = useState([])
   const [cadence, setCadence] = useState('weekly')
+  const [deliveryReady, setDeliveryReady] = useState(false)
   const [consent, setConsent] = useState(false)
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [preferencesLoading, setPreferencesLoading] = useState(false)
@@ -56,6 +58,7 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.detail || `Could not load newsletter settings (${response.status})`)
       if (cancelled) return
+      setDeliveryReady(Boolean(payload.deliveryReady))
       setSelectedTopics(payload.topics || [])
       setCadence(payload.cadence || 'weekly')
       setConsent(Boolean(payload.subscribed))
@@ -110,6 +113,25 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
     }
   }
 
+  const sendTestEmail = async () => {
+    setPreferencesSaving(true)
+    setPreferencesError('')
+    setPreferencesMessage('')
+    try {
+      const token = await user.getIdToken(true)
+      const response = await fetch(`${API_BASE}/api/v1/newsletters/test`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.detail || 'Could not send the test email.')
+      setPreferencesMessage(payload.message)
+    } catch (error) {
+      setPreferencesError(error.message)
+    } finally {
+      setPreferencesSaving(false)
+    }
+  }
+
   const verifyEmail = async () => {
     if (!user) return
     setPreferencesError('')
@@ -125,6 +147,7 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
   const refreshEmailVerification = async () => {
     if (!user) return
     await user.reload()
+    await user.getIdToken(true)
     setEmailVerified(Boolean(user.emailVerified))
     setPreferencesMessage(user.emailVerified ? 'Email verified. You can now save your briefing.' : 'Your email is not verified yet. Open the verification email and try again.')
   }
@@ -152,17 +175,37 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
   }
 
   const ticker = stories.slice(0, 3).map((s) => ({ id: s.id, title: s.title, consensus: s.consensus }))
-  const archive = stories.slice(10, 14)
+  const editionStories = user ? stories : stories.slice(0, 3)
+  const lockedStories = user ? [] : stories.slice(3, 9)
+  const archive = user ? stories.slice(6, 10) : []
 
   return (
     <div className="page-enter">
       <NewsletterMasthead ticker={ticker} />
 
-      <div className="t-border mx-6 mt-6 border md:mx-12">
-        <div className="mx-auto max-w-6xl">
-          <FrontPageGrid stories={stories} onOpenStory={onOpenStory} />
+      <section aria-label="The front page" className="t-border mt-6 border-y">
+        <div className="mx-auto max-w-6xl px-6 pt-6 md:px-12">
+          <Reveal>
+            <SectionHeader index="A" title="The front page" blurb="One lead story, the source stances, and the claims worth a closer look." />
+          </Reveal>
         </div>
-      </div>
+        {editionStories.length ? (
+          <FrontPageGrid stories={editionStories} onOpenStory={onOpenStory} />
+        ) : (
+          <div className="mx-auto max-w-6xl px-6 py-12 text-center md:px-12">
+            <p className="kicker">The edition is coming together</p>
+            <p className="t-muted mt-2 font-display text-xl">Fresh stories will appear here as soon as they’re ready.</p>
+          </div>
+        )}
+      </section>
+      <LockedStoryGrid
+        stories={lockedStories}
+        onUnlock={requestSignIn}
+        eyebrow="Beyond the fold"
+        heading="The next pages"
+        description="Sign in to open the full cross-checks"
+        className="t-border mt-8 border-y px-6 py-7 md:px-12"
+      />
 
       {/* Section B: editions */}
       <section aria-label="Choose your section" className="px-6 py-10 md:px-12">
@@ -172,13 +215,23 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
           </Reveal>
           <div className="t-card t-border mt-8 border p-5 md:p-7">
             {!configured ? <p className="t-muted text-sm">Sign-in is not configured for this preview.</p> : !user ? (
-              <p className="t-muted text-sm">Sign in from the navigation bar to save newsletter preferences to your account.</p>
+              <div className="flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-center">
+                <div className="flex items-start gap-4">
+                  <span className="t-border t-bg flex h-12 w-12 shrink-0 items-center justify-center rounded-full border" aria-hidden="true"><MailOpen className="h-5 w-5" /></span>
+                  <div>
+                    <p className="kicker">Your paper, your rules</p>
+                    <h3 className="headline-serif mt-1 text-2xl">A briefing shaped around you.</h3>
+                    <p className="t-muted mt-1 max-w-xl text-sm leading-relaxed">Choose your topics and delivery rhythm. We’ll send only the reporting you asked for.</p>
+                  </div>
+                </div>
+                <button type="button" onClick={requestSignIn} className="t-btn-primary shrink-0 rounded-full px-5 py-2.5 text-sm font-medium">Sign in to personalize</button>
+              </div>
             ) : (
               <div>
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <p className="font-medium">Email delivery for {user.email}</p>
-                    <p className="t-muted mt-1 text-sm">Only published articles matching your selected topics are included.</p>
+                    <p className="t-muted mt-1 text-sm">Only published articles matching your selected topics are included. Each subscriber receives a private email. To include other people, ask them to sign in and subscribe with their own address.</p>
                     {!emailVerified && <div className="mt-3 flex flex-wrap items-center gap-2 text-sm"><span className="t-muted">Verify this address before subscribing.</span><button type="button" onClick={verifyEmail} className="t-btn-outline rounded-full px-3 py-1.5 text-xs">Send verification email</button><button type="button" onClick={refreshEmailVerification} className="t-btn-outline rounded-full px-3 py-1.5 text-xs">I have verified</button></div>}
                   </div>
                   <label className="flex items-center gap-2 text-sm">
@@ -189,6 +242,7 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
                     </select>
                   </label>
                 </div>
+                {!preferencesLoading && !deliveryReady && <p role="status" className="mt-3 text-sm">Email delivery is awaiting configuration. You can save preferences, but emails will not be sent yet.</p>}
                 <fieldset className="mt-5">
                   <legend className="text-sm font-medium">Choose topics</legend>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -207,6 +261,7 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
                   <button type="button" onClick={savePreferences} disabled={preferencesLoading || preferencesSaving || !topics.length} className="t-btn-primary rounded-full px-5 py-2.5 text-sm font-medium disabled:opacity-60">
                     {preferencesLoading ? 'Loading preferences…' : preferencesSaving ? 'Saving…' : isSubscribed ? 'Save preferences' : 'Subscribe to briefing'}
                   </button>
+                  {isSubscribed && <button type="button" onClick={sendTestEmail} disabled={preferencesSaving || !deliveryReady} className="t-btn-outline rounded-full px-5 py-2.5 text-sm disabled:opacity-60">Send test email</button>}
                   {isSubscribed && <button type="button" onClick={unsubscribe} disabled={preferencesSaving} className="t-btn-outline rounded-full px-5 py-2.5 text-sm">Unsubscribe</button>}
                 </div>
                 {preferencesError && <p role="alert" className="mt-3 text-sm">{preferencesError}</p>}
@@ -223,8 +278,11 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
                   style={{ '--i': i }}
                   className={`stagger-item flex flex-col p-6 md:p-7 ${i > 0 ? 't-border border-t md:border-l md:border-t-0' : ''}`}
                 >
-                  <p className="kicker">{letter.topic}</p>
-                  <h2 className="headline-serif mt-2 text-3xl">{letter.name}</h2>
+                  <div className="flex items-start justify-between gap-4">
+                    <p className="kicker">{letter.topic}</p>
+                    <span aria-hidden="true" className="font-display text-4xl font-bold leading-none opacity-20">0{i + 1}</span>
+                  </div>
+                  <h2 className="headline-serif mt-1 text-3xl">{letter.name}</h2>
                   <p className="t-muted mt-1 text-xs font-semibold uppercase tracking-[0.14em]">{letter.cadence}</p>
                   <p className="t-muted font-body-serif mt-3 text-[15px] leading-relaxed">{letter.description}</p>
                   <div className="t-border mt-4 border-t pt-4">
@@ -262,7 +320,7 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
                   Preview how selected topics shape a digest. Delivery settings above are saved securely to your signed-in account.
                 </p>
                 <div className="mt-6">
-                  <NewsletterPersonalizer stories={stories} topics={topics} />
+                  <NewsletterPersonalizer stories={editionStories} topics={topics} />
                 </div>
               </div>
             </div>
@@ -271,35 +329,31 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
       </section>
 
       {/* Archive strip */}
-      <section aria-label="Past issues" className="px-6 py-10 md:px-12">
+      {archive.length > 0 && <section aria-label="Past issues" className="px-6 py-10 md:px-12">
         <div className="mx-auto max-w-6xl">
           <Reveal>
-            <SectionHeader index="C" title="From the archive" blurb="Recent issues. Every claim traceable to its sources." />
+            <SectionHeader index="C" title="From the archive" blurb="Stories worth keeping on the record." />
           </Reveal>
-          <div className="t-border mt-8 grid grid-cols-1 gap-0 border sm:grid-cols-2 lg:grid-cols-4">
+          <div className={`t-border mt-8 grid grid-cols-1 gap-0 border sm:grid-cols-2 ${archive.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
             {archive.map((s, i) => (
               <article
                 key={s.id}
-                className={`p-6 ${i > 0 ? 't-border border-t sm:border-l sm:border-t-0' : ''} ${
-                  i === 2 ? 'max-lg:border-t max-lg:sm:border-l-0' : ''
-                } ${i === 3 ? 'max-lg:border-t max-lg:sm:border-l' : ''}`}
+                className={`flex min-h-48 flex-col p-6 ${i > 0 ? 't-border border-t sm:border-l sm:border-t-0' : ''} ${i === 2 ? 'max-lg:border-t max-lg:sm:border-l-0' : ''} ${i === 3 ? 'max-lg:border-t max-lg:sm:border-l' : ''}`}
               >
-                <p className="kicker">
-                  Issue No. {13 - i} · {s.topic}
-                </p>
-                <h3 className="headline-serif mt-2 text-lg leading-snug">
+                <p className="kicker">The back pages · {s.topic}</p>
+                <h3 className="headline-serif mt-3 text-xl leading-snug">
                   <button type="button" onClick={() => onOpenStory(s.id)} className="text-left">
                     {s.title}
                   </button>
                 </h3>
-                <p className="t-faint mt-2 text-xs">
-                  {s.publishedAt} · {s.consensus}% consensus · {s.readMins} min
+                <p className="t-faint mt-auto pt-4 text-xs">
+                  {s.publishedAt} · {s.consensus}% consensus · {s.readMins} min read
                 </p>
               </article>
             ))}
           </div>
         </div>
-      </section>
+      </section>}
 
       {/* Subscription folio */}
       <section aria-label="Subscribe" className="px-6 pb-14 md:px-12">

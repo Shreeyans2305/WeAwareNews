@@ -1,11 +1,18 @@
-import { useState } from 'react'
-import { CheckCircle2, MailOpen, Sparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { MailOpen, Sparkles } from 'lucide-react'
 import { TOPICS } from '../data/stories.js'
 
 export default function NewsletterPersonalizer({ stories = [], topics = [] }) {
   const [selected, setSelected] = useState(() => new Set(['AI', 'Good News']))
   const [cadence, setCadence] = useState('weekly')
-  const [length, setLength] = useState('7 min')
+
+  useEffect(() => {
+    if (!stories.length) return
+    setSelected((current) => {
+      if (stories.some((story) => current.has(story.topic))) return current
+      return new Set(stories.slice(0, 3).map((story) => story.topic))
+    })
+  }, [stories])
 
   const toggleTopic = (topic) => {
     setSelected((prev) => {
@@ -16,8 +23,7 @@ export default function NewsletterPersonalizer({ stories = [], topics = [] }) {
     })
   }
 
-  const previewStories = stories.filter((s) => selected.size === 0 || selected.has(s.topic)).slice(0, 3)
-  const [saved, setSaved] = useState(false)
+  const previewStories = stories.filter((s) => selected.has(s.topic)).slice(0, 3)
 
   return (
     <div className="t-card overflow-hidden rounded-2xl border">
@@ -25,10 +31,10 @@ export default function NewsletterPersonalizer({ stories = [], topics = [] }) {
         <div className="p-8 md:p-10">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em]">
             <Sparkles className="h-3.5 w-3.5" />
-            Weekly personalised • mock
+            Personalised email preview
           </p>
-          <h2 className="mt-3 font-display text-3xl font-extrabold tracking-tight">Your Friday briefing, tuned to you</h2>
-          <p className="t-muted mt-2 text-sm leading-relaxed">Pick topics once. We mock the email you would get, with consensus kept in and outrage left out.</p>
+          <h2 className="mt-3 font-display text-3xl font-extrabold tracking-tight">Your briefing, tuned to you</h2>
+          <p className="t-muted mt-2 text-sm leading-relaxed">Pick topics once. Preview the email you would get, with consensus kept in and outrage left out.</p>
 
           <div className="mt-5">
             <p className="t-muted text-xs font-medium uppercase tracking-[0.14em]">Topics</p>
@@ -49,8 +55,8 @@ export default function NewsletterPersonalizer({ stories = [], topics = [] }) {
               <p className="t-muted text-xs font-medium uppercase tracking-[0.14em]">Rhythm</p>
               <div className="mt-2 space-y-2">
                 {[
-                  { id: 'weekly', label: 'Weekly • Fri 7am' },
-                  { id: 'daily', label: 'Daily • 7am' },
+                  { id: 'weekly', label: 'Weekly' },
+                  { id: 'daily', label: 'Daily' },
                 ].map((opt) => (
                   <label key={opt.id} className={cadence === opt.id ? 't-btn-primary flex cursor-pointer items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm' : 't-btn-outline flex cursor-pointer items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm'}>
                     <input type="radio" name="cadence" checked={cadence === opt.id} onChange={() => setCadence(opt.id)} />
@@ -59,33 +65,8 @@ export default function NewsletterPersonalizer({ stories = [], topics = [] }) {
                 ))}
               </div>
             </div>
-            <div>
-              <p className="t-muted text-xs font-medium uppercase tracking-[0.14em]">Length</p>
-              <div className="mt-2 space-y-2">
-                {['5 min', '7 min', '12 min'].map((opt) => (
-                  <button key={opt} type="button" onClick={() => setLength(opt)} aria-pressed={length === opt} className={length === opt ? 't-btn-primary w-full rounded-xl px-3.5 py-2 text-sm' : 't-btn-outline w-full rounded-xl px-3.5 py-2 text-sm'}>
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setSaved(true)
-              window.setTimeout(() => setSaved(false), 2500)
-            }}
-            className="t-btn-primary mt-6 w-full rounded-full px-6 py-2.5 text-sm font-medium"
-          >
-            {saved ? 'Saved (mock)' : `Save my ${cadence} briefing • ${length}`}
-          </button>
-          {saved && (
-            <p role="status" className="mt-2 flex items-center gap-1.5 text-xs">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Preferences saved locally (frontend only).
-            </p>
-          )}
+          <p className="t-muted mt-6 text-sm">This is a preview. Use the subscription settings above to save your daily or weekly delivery.</p>
         </div>
 
         <div className="t-border t-card border-t p-8 md:p-10 lg:border-l lg:border-t-0">
@@ -95,12 +76,12 @@ export default function NewsletterPersonalizer({ stories = [], topics = [] }) {
           </p>
           <div className="t-card mt-4 overflow-hidden rounded-xl border">
             <div className="t-border border-b px-5 py-4">
-              <p className="t-muted text-xs">{cadence === 'weekly' ? 'Friday 7:00 • ' : 'Daily 7:00 • '}{length} • weaware.news</p>
+              <p className="t-muted text-xs">{cadence === 'weekly' ? 'Weekly' : 'Daily'} • weaware.news</p>
               <p className="mt-1 font-display text-lg font-bold leading-tight">Your {cadence} Crosscheck, {previewStories.length} stories, 1 disagreement kept in</p>
             </div>
             <ul className="t-border divide-y">
               {previewStories.length === 0 ? (
-                <li className="t-muted px-5 py-6 text-sm">Pick at least one topic to preview your email.</li>
+                <li className="t-muted px-5 py-6 text-sm">{selected.size ? 'No stories in these topics yet. Your briefing will fill in as new coverage arrives.' : 'Choose a topic to preview your email.'}</li>
               ) : (
                 previewStories.map((s) => (
                   <li key={s.id} className="px-5 py-4">
@@ -112,7 +93,7 @@ export default function NewsletterPersonalizer({ stories = [], topics = [] }) {
                 ))
               )}
             </ul>
-            <p className="t-muted px-5 py-3 text-[11px]">No spam, unsubscribe anytime. Sample uses fictional demo stories.</p>
+            <p className="t-muted px-5 py-3 text-[11px]">No spam, unsubscribe anytime. Preview uses the stories shown on this page.</p>
           </div>
         </div>
       </div>

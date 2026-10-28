@@ -3,7 +3,7 @@
 # DO NOT apply or run 'tofu init -migrate-state' until the bucket is created in Step (b).
 #
 # Bucket specifications:
-#   - Name: weaware-tfstate-project-9ba21d45
+#   - Name: weaware-tfstate-777322408950
 #   - Location: us-central1
 #   - Object Versioning: Enabled
 #   - Uniform Bucket-Level Access: Enabled
@@ -12,7 +12,7 @@
 
 terraform {
   backend "gcs" {
-    bucket = "weaware-tfstate-project-9ba21d45"
+    bucket = "weaware-tfstate-777322408950"
     prefix = "video-pipeline"
   }
 }

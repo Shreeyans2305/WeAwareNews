@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { onAuthStateChanged } from '@firebase/auth'
 import { auth, authConfigured } from './firebase.js'
 import { API_BASE } from '../lib/api.js'
@@ -10,6 +10,9 @@ export function AuthProvider({ children }) {
   const [ready, setReady] = useState(!authConfigured)
   const [apiProfile, setApiProfile] = useState(null)
   const [apiStatus, setApiStatus] = useState('idle')
+  const [signInRequest, setSignInRequest] = useState(0)
+
+  const requestSignIn = useCallback(() => setSignInRequest((request) => request + 1), [])
 
   useEffect(() => {
     if (!auth) return undefined
@@ -35,8 +38,10 @@ export function AuthProvider({ children }) {
     configured: authConfigured,
     apiProfile,
     apiStatus,
+    signInRequest,
+    requestSignIn,
     getIdToken: () => user?.getIdToken() ?? Promise.resolve(null),
-  }), [user, ready, apiProfile, apiStatus])
+  }), [user, ready, apiProfile, apiStatus, signInRequest, requestSignIn])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

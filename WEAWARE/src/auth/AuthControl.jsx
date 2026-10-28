@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { signInEmail, signInGoogle, registerEmail, sendResetEmail, signOutUser } from './firebase.js'
 import { useAuth } from './AuthContext.jsx'
@@ -120,9 +120,16 @@ function AuthDialog({ onClose }) {
 }
 
 export default function AuthControl() {
-  const { user, ready, apiStatus } = useAuth()
+  const { user, ready, apiStatus, signInRequest } = useAuth()
   const [open, setOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const handledSignInRequest = useRef(0)
+
+  useEffect(() => {
+    if (signInRequest <= handledSignInRequest.current) return
+    handledSignInRequest.current = signInRequest
+    if (!user) setOpen(true)
+  }, [signInRequest, user])
 
   if (!ready) return <span className="t-faint px-2 text-xs">Checking account…</span>
   if (!user) return <>

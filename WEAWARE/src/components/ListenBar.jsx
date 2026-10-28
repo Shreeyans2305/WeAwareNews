@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronUp, Pause, Play, RotateCcw, RotateCw, SkipBack, SkipForward, X } from 'lucide-react'
+import { fetchArticleAudio, requestArticleAudio } from '../lib/api.js'
 
 function formatTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60)
@@ -12,28 +13,76 @@ export function listenMinsFor(story) {
 }
 
 export default function ListenBar({ story, queue = [], playing, onToggle, onClose, onSelect, onNext, onPrev }) {
-  const total = listenMinsFor(story) * 60
+  const audioRef = useRef(null)
+  const [audioUrl, setAudioUrl] = useState(null)
+  const [audioStatus, setAudioStatus] = useState('loading')
+  const [audioError, setAudioError] = useState('')
   const [elapsed, setElapsed] = useState(0)
+  const [duration, setDuration] = useState(0)
   const [speed, setSpeed] = useState(1)
   const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
     setElapsed(0)
+    setDuration(0)
+    setAudioUrl(null)
+    setAudioError('')
+    setAudioStatus('loading')
+    const controller = new AbortController()
+    let timer
+    const loadAudio = async () => {
+      try {
+        let result = await requestArticleAudio(story.id, controller.signal)
+        while (result.status !== 'ready' && result.status !== 'failed') {
+          await new Promise((resolve) => { timer = window.setTimeout(resolve, 2000) })
+          if (controller.signal.aborted) return
+          result = await fetchArticleAudio(story.id, controller.signal)
+        }
+        if (controller.signal.aborted) return
+        if (result.status === 'ready' && result.audioUrl) {
+          setAudioUrl(result.audioUrl)
+          setAudioStatus('ready')
+        } else if (result.status === 'failed') {
+          setAudioStatus('failed')
+          setAudioError(result.error || 'Audio generation failed. Please try again later.')
+        } else {
+          setAudioStatus('pending')
+        }
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          setAudioStatus('failed')
+          setAudioError('Could not prepare audio. Please try again later.')
+        }
+      }
+    }
+    loadAudio()
+    return () => {
+      controller.abort()
+      window.clearTimeout(timer)
+      audioRef.current?.pause()
+    }
   }, [story.id])
 
   useEffect(() => {
-    if (!playing) return
-    const id = window.setInterval(() => {
-      setElapsed((prev) => (prev + 1 >= total ? 0 : prev + 1))
-    }, 1000 / speed)
-    return () => window.clearInterval(id)
-  }, [playing, total, speed])
+    const audio = audioRef.current
+    if (!audio || !audioUrl) return
+    audio.playbackRate = speed
+    if (playing) audio.play().catch(() => {
+      setAudioStatus('failed')
+      setAudioError('Playback failed. Try pressing play again.')
+    })
+    else audio.pause()
+  }, [playing, audioUrl, speed])
 
   if (!story) return null
 
+  const total = duration || listenMinsFor(story) * 60
   const progress = Math.min(100, (elapsed / total) * 100)
   const cycleSpeed = () => setSpeed((s) => (s === 1 ? 1.25 : s === 1.25 ? 1.5 : 1))
-  const seekBy = (delta) => setElapsed((v) => Math.max(0, Math.min(total, v + delta)))
+  const seekBy = (delta) => {
+    const audio = audioRef.current
+    if (audio && Number.isFinite(audio.duration)) audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + delta))
+  }
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 px-3 pb-3 md:px-6 md:pb-5" role="region" aria-label="Audiobook player">
@@ -44,22 +93,22 @@ export default function ListenBar({ story, queue = [], playing, onToggle, onClos
             <span className="eq-bar w-1 rounded-full" style={{ height: '100%' }} />
             <span className="eq-bar w-1 rounded-full" style={{ height: '100%' }} />
           </div>
-          <p className="t-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Audiobook • AI voice • {speed}x</p>
+          <p className="t-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Article audio • AI voice • {speed}x</p>
           <div className="ml-auto flex items-center gap-1">
-            <button type="button" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded} aria-label={expanded ? 'Collapse queue' : 'Expand queue'} className="t-btn-outline rounded-full p-2">
+            <button type="button" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded} aria-label={expanded ? 'Collapse queue' : 'Expand queue'} className="t-btn-outline flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-0">
               <ChevronUp className={`h-4 w-4 ${expanded ? 'rotate-180' : ''}`} />
             </button>
-            <button type="button" onClick={onClose} aria-label="Close player" className="t-btn-outline rounded-full p-2">
+            <button type="button" onClick={onClose} aria-label="Close player" className="t-btn-outline flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-0">
               <X className="h-4 w-4" />
             </button>
           </div>
         </div>
 
         <div className="flex items-center gap-3 px-4 pb-2 md:gap-4 md:px-5">
-          <button type="button" onClick={onPrev} aria-label="Previous story" className="t-btn-outline hidden rounded-full p-2 sm:block">
+          <button type="button" onClick={onPrev} aria-label="Previous story" className="t-btn-outline hidden h-11 w-11 shrink-0 items-center justify-center rounded-full p-0 sm:flex">
             <SkipBack className="h-4 w-4" />
           </button>
-          <button type="button" onClick={() => seekBy(-15)} aria-label="Back 15 seconds" className="t-btn-outline rounded-full p-2">
+          <button type="button" onClick={() => seekBy(-15)} aria-label="Back 15 seconds" className="t-btn-outline flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-0">
             <RotateCcw className="h-4 w-4" />
           </button>
           <button
@@ -71,16 +120,16 @@ export default function ListenBar({ story, queue = [], playing, onToggle, onClos
           >
             {playing ? <Pause className="h-5 w-5" /> : <Play className="ml-0.5 h-5 w-5" />}
           </button>
-          <button type="button" onClick={() => seekBy(15)} aria-label="Forward 15 seconds" className="t-btn-outline rounded-full p-2">
+          <button type="button" onClick={() => seekBy(15)} aria-label="Forward 15 seconds" className="t-btn-outline flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-0">
             <RotateCw className="h-4 w-4" />
           </button>
-          <button type="button" onClick={onNext} aria-label="Next story" className="t-btn-outline hidden rounded-full p-2 sm:block">
+          <button type="button" onClick={onNext} aria-label="Next story" className="t-btn-outline hidden h-11 w-11 shrink-0 items-center justify-center rounded-full p-0 sm:flex">
             <SkipForward className="h-4 w-4" />
           </button>
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{story.title}</p>
-            <p className="t-muted truncate text-xs">{story.topic} • {listenMinsFor(story)} min listen • {story.consensus}% consensus</p>
+          <p className="t-muted truncate text-xs">{story.topic} • {audioStatus === 'ready' ? `${Math.ceil(total / 60)} min listen` : audioStatus === 'pending' ? 'Still preparing audio' : audioStatus === 'loading' ? 'Preparing audio…' : audioError || 'Audio unavailable'}</p>
           </div>
 
           <button type="button" onClick={cycleSpeed} aria-label={`Playback speed ${speed}x, activate to change`} className="t-btn-outline shrink-0 rounded-full px-3 py-1.5 text-xs font-medium">
@@ -91,7 +140,7 @@ export default function ListenBar({ story, queue = [], playing, onToggle, onClos
         <div className="px-4 pb-3 md:px-5 md:pb-4">
           <div className="t-muted flex items-center justify-between text-[11px]">
             <span>{formatTime(Math.floor(elapsed))}</span>
-            <span>{formatTime(total)}</span>
+            <span>{duration ? formatTime(Math.floor(duration)) : '--:--'}</span>
           </div>
           <div
             role="progressbar"
@@ -103,7 +152,8 @@ export default function ListenBar({ story, queue = [], playing, onToggle, onClos
             onClick={(e) => {
               const rect = e.currentTarget.getBoundingClientRect()
               const ratio = (e.clientX - rect.left) / rect.width
-              setElapsed(Math.floor(ratio * total))
+              const audio = audioRef.current
+              if (audio && Number.isFinite(audio.duration)) audio.currentTime = ratio * audio.duration
             }}
           >
             <div className="h-full rounded-full" style={{ width: `${progress}%`, background: 'var(--fg)' }} />
@@ -135,6 +185,18 @@ export default function ListenBar({ story, queue = [], playing, onToggle, onClos
           </div>
         )}
       </div>
+      {audioUrl ? (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          preload="metadata"
+          onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
+          onDurationChange={(event) => setDuration(event.currentTarget.duration || 0)}
+          onTimeUpdate={(event) => setElapsed(event.currentTarget.currentTime || 0)}
+          onEnded={onNext}
+          onError={() => { setAudioStatus('failed'); setAudioError('Audio file could not be loaded.') }}
+        />
+      ) : null}
     </div>
   )
 }

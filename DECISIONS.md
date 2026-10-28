@@ -1,5 +1,7 @@
 # Architecture & Implementation Decisions
 
+> This file includes historical decisions. For the current service layout and user-facing feature list, see [HANDOFF.md](HANDOFF.md). Historical model names, pricing, and deployment assumptions should be rechecked before reuse.
+
 ## 1. Reclustering & `posted=true` Survival Investigation
 **Finding:** The existing `posted=true` protection **DOES NOT survive reclustering**.
 
@@ -74,3 +76,16 @@
 1. **Dialogue Verbatim Drift**: Veo occasionally paraphrases or drops words in spoken dialogue when action prompts are dense. Pacing budget (~2.5 words/sec) and concise prompts minimize drift. If dialogue fidelity requires exact phoneme timing, the architecture includes a post-production TTS mux fallback.
 2. **Character & Desk Continuity**: First-frame conditioning ensures initial frame consistency; subtle lighting or attire shifts can occur across shot cuts. Hard cuts between distinct camera framings (Host medium -> Host wide -> Correspondent -> Host sign-off) mask continuity jumps naturally, mimicking real television editing.
 3. **Future Extension**: Multi-platform publishing adapter (adding YouTube Shorts and TikTok endpoints alongside Make.com Instagram Reel polling).
+
+---
+
+## 6. Current Product Implementation
+
+- **Website**: `WEAWARE/` is a React/Vite single-page app with home, feed, article reader, newsletter, podcast/audio, and About views. The main frontend guide is [`WEAWARE/README.md`](WEAWARE/README.md).
+- **Access**: Firebase email/password and Google sign-in are supported. The API verifies ID tokens for protected user actions. Guests see a three-story preview and a limited feed; this is a frontend access experience, not a privacy boundary for public published articles.
+- **Newsletters**: Signed-in users with verified email choose topics, daily/weekly cadence, and explicit consent. Preferences are account-scoped; recipients can unsubscribe from the account or the email link. See [`backend/NEWSLETTERS.md`](backend/NEWSLETTERS.md).
+- **Audio and podcasts**: Article narration is generated on request and cached in Cloud Storage. Podcast scripts are reviewed before synthesis; only completed playable episodes appear in the public episode endpoint and RSS feed. See [`backend/audio/README.md`](backend/audio/README.md).
+- **Video**: The current editorial direction is neutral, attributed broadcast reporting. The script and editor gates reject satire, loaded language, unsupported claims, and opinionated framing. Human review is required before the approved-video endpoint can expose an episode to a publishing integration. See [`video/README.md`](video/README.md).
+- **Reader-facing confidence language**: Coverage agreement is a signal for readers to inspect, not proof of truth, an exhaustive source census, or a substitute for judgment. AI-assisted summaries can be wrong; original reporting remains linked.
+
+The sections above the current implementation note preserve the original technical decisions and limitations. Some wording there describes an earlier phase; follow the service READMEs and current code for operational behavior.

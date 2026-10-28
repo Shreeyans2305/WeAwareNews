@@ -25,7 +25,7 @@ export const newsletters = [
   {
     id: 'ledgerline-markets',
     name: 'Ledgerline Markets',
-    cadence: 'Weekdays, 5 min',
+    cadence: 'Daily, 5 min',
     topic: 'Markets and World',
     description:
       'Rates, listings, and shipping pacts without the hype. Futures pricing labeled as pricing, guidance labeled as guidance.',

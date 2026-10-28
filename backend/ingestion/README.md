@@ -41,11 +41,12 @@ is a coverage signal, not proof that an event happened in India.
 | `WEAWARE_POLL_INTERVAL_PRIMARY` | 300 | Minimum seconds between successful polls of a primary feed |
 | `WEAWARE_POLL_INTERVAL_SECONDARY` | 900 | Minimum seconds between successful polls of a secondary feed |
 
-The Cloud Scheduler currently starts the entire build every two days, so the tier
-intervals are lower bounds rather than the effective collection cadence. Failed
-feeds are logged and retried next run. The adapter limits response bodies to 2 MB
-and carries feed image URLs into the stored item. Existing images are preserved if
-a later feed response has no image.
+The enabled Cloud Scheduler job `weaware-pipeline-scheduler` starts the entire
+Cloud Build pipeline daily at 00:00 UTC. The tier intervals are lower bounds,
+not the effective collection cadence. Failed feeds are logged and retried next
+run. The adapter limits response bodies to 2 MB and carries feed image URLs into
+the stored item. Existing images are preserved if a later feed response has no
+image.
 
 RSS access is free, but publishers retain their content rights. Keep links and
 attribution to the original articles, and review a publisher's terms before

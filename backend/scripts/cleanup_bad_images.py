@@ -30,7 +30,7 @@ PROXY_HOST = os.getenv("DB_HOST", "127.0.0.1")
 PROXY_PORT = int(os.getenv("DB_PORT", "5433"))
 DB_NAME = os.getenv("DB_NAME", "weaware")
 DB_USER = os.getenv("DB_USER", "weaware_user")
-GCP_PROJECT = os.getenv("GCP_PROJECT", "project-9ba21d45-1dfd-4108-b69")
+GCP_PROJECT = os.getenv("GCP_PROJECT", "weaware")
 SECRET_NAME = "db-password"
 
 

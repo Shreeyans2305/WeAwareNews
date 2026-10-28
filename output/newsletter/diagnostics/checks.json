@@ -1,0 +1,26 @@
+[
+  {
+    "code": "A",
+    "description": "newspaper, no external URLs",
+    "subject": "Crosscheck placement 83d264 A",
+    "message_id": "<179317909176.47723.9161974646778626199@gmail.com>"
+  },
+  {
+    "code": "B",
+    "description": "source links only",
+    "subject": "Crosscheck placement 83d264 B",
+    "message_id": "<179317909569.47723.6823996373642223441@gmail.com>"
+  },
+  {
+    "code": "C",
+    "description": "lead image only",
+    "subject": "Crosscheck placement 83d264 C",
+    "message_id": "<179317909935.47723.3581234704037381553@gmail.com>"
+  },
+  {
+    "code": "D",
+    "description": "unsubscribe URL only",
+    "subject": "Crosscheck placement 83d264 D",
+    "message_id": "<179317910293.47723.5449085479211101670@gmail.com>"
+  }
+]

@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Moon, Sun } from 'lucide-react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { ArrowLeftRight, ArrowUpRight, Moon, Sun } from 'lucide-react'
 import { fetchArticle, fetchArticles, fetchTopics, prioritizeStoriesWithImages, toStory } from './lib/api.js'
 import { ThemeProvider, useTheme } from './theme.js'
 import Topbar from './components/Topbar.jsx'
@@ -7,12 +7,13 @@ import SiteFooter from './components/SiteFooter.jsx'
 import ListenBar from './components/ListenBar.jsx'
 import ShareSheet from './components/ShareSheet.jsx'
 import AuthControl from './auth/AuthControl.jsx'
-import { AuthProvider } from './auth/AuthContext.jsx'
+import { AuthProvider, useAuth } from './auth/AuthContext.jsx'
 
 const NAV_LINKS = [
   { id: 'feed', label: 'Feed' },
   { id: 'newsletters', label: 'Newsletters' },
   { id: 'podcasts', label: 'Podcasts' },
+  { id: 'sherlock', label: 'Sherlock' },
   { id: 'about', label: 'About' },
 ]
 
@@ -21,6 +22,9 @@ const Reader = lazy(() => import('./components/Reader.jsx'))
 const NewslettersPage = lazy(() => import('./components/NewslettersPage.jsx'))
 const PodcastsPage = lazy(() => import('./components/PodcastsPage.jsx'))
 const AboutPage = lazy(() => import('./components/AboutPage.jsx'))
+const SherlockPage = lazy(() => import('./components/SherlockPage.jsx'))
+const FREE_STORY_LIMIT = 3
+const GUEST_STORY_PREVIEW_LIMIT = 9
 
 function ThemeToggle() {
   const { theme, toggle } = useTheme()
@@ -39,120 +43,199 @@ function ThemeToggle() {
 }
 
 function Hero({ onNavigate }) {
-  const [joined, setJoined] = useState(false)
-  const [reduceMotion, setReduceMotion] = useState(() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
-  const videoRef = useRef(null)
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const updateMotionPreference = (event) => {
-      setReduceMotion(event.matches)
-      if (event.matches) videoRef.current?.pause()
-      else videoRef.current?.play().catch(() => {})
-    }
-    mediaQuery.addEventListener?.('change', updateMotionPreference)
-    return () => mediaQuery.removeEventListener?.('change', updateMotionPreference)
-  }, [])
-
   return (
-    <section className="hero-home t-bg relative min-h-screen w-full overflow-hidden">
-      <video
-        ref={videoRef}
-        className="hero-media absolute inset-0 h-full w-full object-cover opacity-40"
-        autoPlay={!reduceMotion}
-        loop
-        muted
-        playsInline
-        preload={reduceMotion ? 'none' : 'auto'}
-        poster="/weaware-poster.jpg"
-        src="/intro-preview.mp4"
-      />
-
-      <div className="relative z-10 flex min-h-screen flex-col px-4 pt-3 md:px-8">
-        <nav aria-label="Primary" className="glass-nav mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl px-3 py-2.5 md:flex-nowrap md:px-8">
-          <button type="button" onClick={() => onNavigate('hero')} aria-label="WeAware home" className="flex shrink-0 items-center gap-2">
-            <img src="/weaware-logo.png" alt="WeAware — globe with WEAWARE banner" className="h-6 w-auto" />
-            <span className="font-display text-[15px] font-bold tracking-tight">WeAware</span>
+    <>
+      <section className="hero-home relative min-h-screen w-full overflow-hidden">
+        <header className="hero-header">
+          <button type="button" onClick={() => onNavigate('hero')} aria-label="WeAware home" className="hero-brand">
+            <img src="/weaware-logo.png" alt="WeAware" />
           </button>
-
-          <div className="hidden items-center gap-5 md:flex">
-            {NAV_LINKS.map((link) => (
-              <button
-                key={link.id}
-                type="button"
-                onClick={() => onNavigate(link.id)}
-                className="nav-link"
-              >
-                {link.label}
-              </button>
-            ))}
-          </div>
-          <div className="order-2 ml-auto flex shrink-0 items-center gap-1.5 md:order-none md:gap-2">
-            <AuthControl />
-            <a href="#waitlist" className="t-btn-primary rounded-full px-4 py-1.5 text-[13px] font-medium">
-              Join waitlist
-            </a>
-            <ThemeToggle />
-          </div>
-
-          <div className="order-3 flex w-full items-center justify-between gap-1 md:hidden">
-            {NAV_LINKS.map((link) => (
-              <button
-                key={link.id}
-                type="button"
-                onClick={() => onNavigate(link.id)}
-                className="nav-link"
-              >
-                {link.label}
-              </button>
-            ))}
-          </div>
-        </nav>
-
-        <main className="mt-auto flex flex-col justify-end gap-8 px-6 pb-14 md:px-12 md:pb-16">
-          <div className="max-w-3xl">
-            <div className="hero-rise glass-nav mb-5 inline-flex items-center gap-2 rounded-full px-3.5 py-1.5" style={{ '--i': 0 }}>
-              <span className="signal-dot h-1.5 w-1.5 rounded-full" />
-              <span className="hero-copy eyebrow-kanit text-[12px]">Cross-checked news, with sources shown</span>
-            </div>
-            <h1 className="hero-copy hero-rise font-display text-6xl font-extrabold leading-[0.98] tracking-tight md:text-7xl lg:text-[5.4rem]" style={{ '--i': 1 }}>
-              News, cross-checked by AI agents, not ranked for outrage.
-            </h1>
-            <p className="hero-copy hero-rise mt-4 font-display text-lg font-medium md:text-xl" style={{ '--i': 2 }}>
-              WeAware cross-references every source, flags disagreement instead of hiding it, and always links back
-              to the original reporting.
-            </p>
-            {joined ? (
-              <p id="waitlist" role="status" className="hero-rise glass-nav mt-8 inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm" style={{ '--i': 3 }}>
-                <span className="signal-dot h-1.5 w-1.5 rounded-full" />
-                You are on the waitlist. Watch your inbox for early access.
-              </p>
-            ) : (
-              <form
-                id="waitlist"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  setJoined(true)
-                }}
-                className="hero-rise glass-nav mt-8 inline-flex max-w-full flex-col gap-2 rounded-2xl p-1.5 sm:flex-row sm:items-center sm:rounded-full"
-                style={{ '--i': 3 }}
-              >
-                <label htmlFor="hero-email" className="sr-only">Email address</label>
-                <input
-                  id="hero-email"
-                  type="email"
-                  required
-                  placeholder="Get early access"
-                  aria-label="Email address"
-                  className="t-field w-full rounded-xl bg-transparent px-4 py-2 text-sm outline-none sm:w-64 sm:rounded-full"
-                />
-                <button type="submit" className="t-btn-primary rounded-xl px-6 py-2.5 text-sm font-medium sm:rounded-full">
-                  Join waitlist
+          <nav aria-label="Primary" className="hero-navigation">
+            <div className="hero-nav-links">
+              {NAV_LINKS.map((link) => (
+                <button
+                  key={link.id}
+                  type="button"
+                  onClick={() => onNavigate(link.id)}
+                  className="nav-link"
+                >
+                  {link.label}
                 </button>
-              </form>
-            )}
+              ))}
+            </div>
+            <div className="hero-nav-actions">
+              <AuthControl />
+              <ThemeToggle />
+            </div>
+          </nav>
+        </header>
+
+        <main className="hero-stage">
+          <h1 className="hero-wordmark" aria-label="WeAware">
+            <span aria-hidden="true">WE</span>
+            <span aria-hidden="true">AWARE</span>
+          </h1>
+          <img className="hero-big-ben" src="/BigBen.png" alt="Elizabeth Tower, Big Ben" />
+          <div className="hero-caption">
+            <p>We bring multiple reports together, keeping sources and uncertainty in view so you can make up your own mind.</p>
+            <button type="button" onClick={() => onNavigate('feed')} aria-label="Explore the news feed" className="hero-enter">
+              <ArrowUpRight aria-hidden="true" />
+            </button>
           </div>
         </main>
+      </section>
+      <PerspectiveSection />
+    </>
+  )
+}
+
+const PERSPECTIVES = [
+  {
+    id: 'one',
+    point: 'Point 01',
+    principle: 'Start with the source.',
+    detail: 'Don’t let one source set the frame. See what other reporting adds, and where the accounts differ.',
+    example: 'Investment & jobs',
+    exampleDetail: 'One report leads with the public projects and hiring a proposed budget could support.',
+    outlet: 'The Economic Times',
+    outletMark: 'ET',
+    reportTitle: '“Fiscally fit & on the jobs hunt”',
+    reportSummary: 'The Economic Times puts the budget’s economic goals—keeping the deficit in check and encouraging employment—front and center.',
+    reportImage: '/news/markets-1.jpg',
+    reportImageAlt: 'Office towers viewed from below',
+  },
+  {
+    id: 'two',
+    point: 'Point 02',
+    principle: 'Keep the trade-offs in view.',
+    detail: 'Look beyond the headline. We show what’s supported, what differs, and what’s still unclear.',
+    example: 'Cost & delivery',
+    exampleDetail: 'Another focuses on borrowing, timing, and the conditions needed to deliver those plans.',
+    outlet: 'The Indian Express',
+    outletMark: 'IE',
+    reportTitle: '“Election Outcome Budget”',
+    reportSummary: 'The Indian Express reads the proposals in light of the election: the employment push as a response to job concerns, and support for Andhra Pradesh and Bihar as significant in a coalition government.',
+    reportImage: '/news/world-1.jpg',
+    reportImageAlt: 'A busy shipping port and its container cranes',
+  },
+]
+
+function PerspectiveSection() {
+  const [balance, setBalance] = useState(50)
+  const [activeSource, setActiveSource] = useState(null)
+
+  const showSource = (index) => setActiveSource(index)
+  const handleSourceKeyDown = (event, index) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      showSource(index)
+    }
+  }
+
+  return (
+    <section className="perspective-section" aria-labelledby="perspective-title">
+      <div className="perspective-inner">
+        <div className="perspective-heading">
+          <p className="perspective-eyebrow">A clearer view of the news</p>
+          <h2 id="perspective-title">Hear both sides</h2>
+        </div>
+
+        <div
+          className="perspective-layout"
+          style={{ '--perspective-split': `${balance}%` }}
+          onMouseLeave={() => setActiveSource(null)}
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setActiveSource(null)
+          }}
+        >
+          <article
+            className="perspective-copy perspective-copy-first"
+            role="button"
+            tabIndex={0}
+            aria-label="Show The Economic Times report example"
+            aria-haspopup="true"
+            onMouseEnter={() => showSource(0)}
+            onFocus={() => showSource(0)}
+            onKeyDown={(event) => handleSourceKeyDown(event, 0)}
+          >
+            <p className="perspective-point">{PERSPECTIVES[0].point}</p>
+            <h3>{PERSPECTIVES[0].principle}</h3>
+            <p className="perspective-copy-detail">{PERSPECTIVES[0].detail}</p>
+            <div className="perspective-rule" />
+            <p className="perspective-example-label">Example</p>
+            <h4>{PERSPECTIVES[0].example}</h4>
+            <p className="perspective-copy-detail">{PERSPECTIVES[0].exampleDetail}</p>
+          </article>
+
+          <figure
+            className={`perspective-visual ${activeSource !== null ? 'has-source-preview' : ''}`}
+            onMouseMove={(event) => {
+              if (event.target.closest('.perspective-slider-wrap, .perspective-source-preview')) return
+              const bounds = event.currentTarget.getBoundingClientRect()
+              const splitX = bounds.left + bounds.width * (balance / 100)
+              showSource(event.clientX < splitX ? 0 : 1)
+            }}
+            onClick={(event) => {
+              if (event.target.closest('.perspective-slider-wrap, .perspective-source-preview')) return
+              const bounds = event.currentTarget.getBoundingClientRect()
+              const splitX = bounds.left + bounds.width * (balance / 100)
+              showSource(event.clientX < splitX ? 0 : 1)
+            }}
+          >
+            <img src="/LeftRight.png" alt="A tall office building viewed from below" />
+            <div className="perspective-tint perspective-tint-first" aria-hidden="true" />
+            <div className="perspective-tint perspective-tint-second" aria-hidden="true" />
+            <div className="perspective-divider" aria-hidden="true" />
+            {activeSource !== null && (
+              <aside className={`perspective-source-preview perspective-source-preview-${activeSource === 0 ? 'first' : 'second'}`} role="status" aria-live="polite">
+                <img src={PERSPECTIVES[activeSource].reportImage} alt={PERSPECTIVES[activeSource].reportImageAlt} />
+                <div className="perspective-source-preview-copy">
+                  <p className="perspective-source-preview-outlet">
+                    <span aria-hidden="true">{PERSPECTIVES[activeSource].outletMark}</span>
+                    {PERSPECTIVES[activeSource].outlet}
+                  </p>
+                  <strong>{PERSPECTIVES[activeSource].reportTitle}</strong>
+                  <p>{PERSPECTIVES[activeSource].reportSummary}</p>
+                </div>
+              </aside>
+            )}
+            <div className="perspective-slider-wrap">
+              <ArrowLeftRight size={15} aria-hidden="true" />
+              <label className="sr-only" htmlFor="perspective-balance">Compare the two perspectives</label>
+              <input
+                id="perspective-balance"
+                type="range"
+                min="8"
+                max="92"
+                value={balance}
+                onChange={(event) => setBalance(Number(event.target.value))}
+                aria-valuetext={`${balance}% perspective one, ${100 - balance}% perspective two`}
+              />
+              <span>Slide to compare</span>
+            </div>
+          </figure>
+
+          <article
+            className="perspective-copy perspective-copy-second"
+            role="button"
+            tabIndex={0}
+            aria-label="Show The Indian Express report example"
+            aria-haspopup="true"
+            onMouseEnter={() => showSource(1)}
+            onFocus={() => showSource(1)}
+            onKeyDown={(event) => handleSourceKeyDown(event, 1)}
+          >
+            <p className="perspective-point">{PERSPECTIVES[1].point}</p>
+            <h3>{PERSPECTIVES[1].principle}</h3>
+            <p className="perspective-copy-detail">{PERSPECTIVES[1].detail}</p>
+            <div className="perspective-rule" />
+            <p className="perspective-example-label">Example</p>
+            <h4>{PERSPECTIVES[1].example}</h4>
+            <p className="perspective-copy-detail">{PERSPECTIVES[1].exampleDetail}</p>
+          </article>
+        </div>
+
+        <p className="perspective-signoff">You decide<span>!!</span></p>
       </div>
     </section>
   )
@@ -160,6 +243,7 @@ function Hero({ onNavigate }) {
 
 function Shell() {
   const { theme } = useTheme()
+  const { user, requestSignIn } = useAuth()
   const [view, setView] = useState('hero')
   const [topic, setTopic] = useState('All')
   const [query, setQuery] = useState('')
@@ -174,6 +258,8 @@ function Shell() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [apiError, setApiError] = useState('')
   const [detail, setDetail] = useState(null)
+  const filtered = stories
+  const previewStories = filtered.slice(0, FREE_STORY_LIMIT)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -185,7 +271,7 @@ function Shell() {
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
       setLoading(true)
-      fetchArticles({ topic, query, signal: controller.signal })
+      fetchArticles({ topic, query, limit: user ? 24 : GUEST_STORY_PREVIEW_LIMIT, signal: controller.signal })
         .then((result) => {
           setStories(prioritizeStoriesWithImages((result.articles || []).map(toStory)))
           setTotal(result.total || 0)
@@ -200,7 +286,7 @@ function Shell() {
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [topic, query])
+  }, [topic, query, user])
 
   useEffect(() => {
     if (!activeId) {
@@ -215,6 +301,13 @@ function Shell() {
       })
     return () => controller.abort()
   }, [activeId])
+
+  useEffect(() => {
+    if (!user && activeId && !previewStories.some((story) => story.id === activeId)) {
+      setActiveId(null)
+      requestSignIn()
+    }
+  }, [user, activeId, requestSignIn, stories])
 
   const navigate = (next) => {
     if (next === 'hero') {
@@ -235,7 +328,7 @@ function Shell() {
     )
   }
 
-  const filtered = stories
+  const hasMoreStories = filtered.length > previewStories.length || filtered.length < total
   const activeStory = detail || stories.find((story) => story.id === activeId) || null
 
   const resultLabel =
@@ -244,6 +337,10 @@ function Shell() {
     (query.trim() !== '' ? ` matching “${query.trim()}”` : '')
 
   const openStory = (id) => {
+    if (!user && !previewStories.some((story) => story.id === id)) {
+      requestSignIn()
+      return
+    }
     setActiveId(id)
     setView('feed')
     window.scrollTo(0, 0)
@@ -319,20 +416,34 @@ function Shell() {
             : loading && !stories.length ? <section className="mx-auto max-w-4xl px-6 py-20 text-center t-muted">Loading the latest cross-checked articles…</section>
               : <>
                 <FeedGrid
-                  stories={filtered}
-                  resultLabel={resultLabel}
+                  stories={user ? filtered : previewStories}
+                  lockedStories={user ? [] : filtered.slice(FREE_STORY_LIMIT, GUEST_STORY_PREVIEW_LIMIT)}
+                  resultLabel={user ? resultLabel : `Showing ${previewStories.length} of ${total} stories`}
                   onOpen={openStory}
+                  onUnlock={requestSignIn}
                   onListen={startListen}
                   onShare={setShareId}
                   onClear={() => { setTopic('All'); setQuery('') }}
                 />
-                {stories.length < total && <div className="px-6 pb-12 text-center"><button type="button" onClick={loadMoreStories} disabled={loadingMore} className="t-btn-outline rounded-full px-6 py-2.5 text-sm">{loadingMore ? 'Loading…' : 'Load more articles'}</button></div>}
+                {hasMoreStories && <div className="mx-auto max-w-4xl px-6 pb-12 text-center">
+                  {!user ? (
+                    <div className="t-card rounded-2xl border px-6 py-7 sm:px-10">
+                      <p className="eyebrow-kanit t-muted text-[11px]">You’re reading a preview</p>
+                      <h2 className="mt-2 font-display text-2xl font-bold tracking-tight sm:text-3xl">See the full picture</h2>
+                      <p className="t-muted mx-auto mt-2 max-w-xl text-sm leading-relaxed">Sign in to explore every cross-checked story and read beyond these featured articles.</p>
+                      <button type="button" onClick={requestSignIn} className="t-btn-primary mt-5 rounded-full px-6 py-2.5 text-sm font-medium">Sign in to read more</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={loadMoreStories} disabled={loadingMore} className="t-btn-outline rounded-full px-6 py-2.5 text-sm">{loadingMore ? 'Loading…' : 'Load more articles'}</button>
+                  )}
+                </div>}
               </>
         ) : null}
         {view === 'newsletters' ? <NewslettersPage onOpenStory={openStory} stories={stories} topics={topics} /> : null}
         {view === 'podcasts' ? (
           <PodcastsPage onListen={startListen} currentListenId={listenId} listeningPlaying={listeningPlaying} stories={stories} />
         ) : null}
+        {view === 'sherlock' ? <SherlockPage /> : null}
         {view === 'about' ? <AboutPage onNavigate={navigate} stories={stories} /> : null}
         </Suspense>
       </main>

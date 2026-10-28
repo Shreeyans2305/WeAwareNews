@@ -154,16 +154,10 @@ video/scratch/
 *.tfplan
 *tfplan.txt
 
-
+# Local notes and generated working files
 .obsidian
-
 Markdown
-
 output
-
 tmp
-
 WEAWARE_BLACKBOOK_GUIDE.md
-
-
 WEAWARE_TEST_COSTS.md

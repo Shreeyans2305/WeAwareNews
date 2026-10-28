@@ -1,0 +1,33 @@
+// !$*UTF8*$!
+{ archiveVersion = 1; classes = {}; objectVersion = 56; objects = {
+000000000000000000000064 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = API.swift; sourceTree = "<group>"; };
+0000000000000000000000C8 = {isa = PBXBuildFile; fileRef = 000000000000000000000064; };
+000000000000000000000065 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountViews.swift; sourceTree = "<group>"; };
+0000000000000000000000C9 = {isa = PBXBuildFile; fileRef = 000000000000000000000065; };
+000000000000000000000066 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth.swift; sourceTree = "<group>"; };
+0000000000000000000000CA = {isa = PBXBuildFile; fileRef = 000000000000000000000066; };
+000000000000000000000067 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+0000000000000000000000CB = {isa = PBXBuildFile; fileRef = 000000000000000000000067; };
+000000000000000000000068 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Player.swift; sourceTree = "<group>"; };
+0000000000000000000000CC = {isa = PBXBuildFile; fileRef = 000000000000000000000068; };
+000000000000000000000069 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodcastsView.swift; sourceTree = "<group>"; };
+0000000000000000000000CD = {isa = PBXBuildFile; fileRef = 000000000000000000000069; };
+00000000000000000000006A = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SherlockView.swift; sourceTree = "<group>"; };
+0000000000000000000000CE = {isa = PBXBuildFile; fileRef = 00000000000000000000006A; };
+00000000000000000000006B = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeAwareApp.swift; sourceTree = "<group>"; };
+0000000000000000000000CF = {isa = PBXBuildFile; fileRef = 00000000000000000000006B; };
+000000000000000000000001 = {isa = PBXProject; attributes = {LastUpgradeCheck = 2710; }; buildConfigurationList = 00000000000000000000000A; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; knownRegions = (en, Base); mainGroup = 000000000000000000000002; productRefGroup = 000000000000000000000004; projectDirPath = ""; targets = (000000000000000000000005); };
+000000000000000000000002 = {isa = PBXGroup; children = (000000000000000000000003, 000000000000000000000004, 000000000000000000000008); sourceTree = "<group>"; };
+000000000000000000000003 = {isa = PBXGroup; path = WeAware; sourceTree = "<group>"; children = (000000000000000000000064,000000000000000000000065,000000000000000000000066,000000000000000000000067,000000000000000000000068,000000000000000000000069,00000000000000000000006A,00000000000000000000006B); };
+000000000000000000000004 = {isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (000000000000000000000006); };
+000000000000000000000005 = {isa = PBXNativeTarget; buildConfigurationList = 00000000000000000000000B; buildPhases = (000000000000000000000007); buildRules = (); dependencies = (); name = WeAware; productName = WeAware; productReference = 000000000000000000000006; productType = "com.apple.product-type.application"; };
+000000000000000000000006 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = WeAware.app; sourceTree = BUILT_PRODUCTS_DIR; };
+000000000000000000000007 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (0000000000000000000000C8,0000000000000000000000C9,0000000000000000000000CA,0000000000000000000000CB,0000000000000000000000CC,0000000000000000000000CD,0000000000000000000000CE,0000000000000000000000CF); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000008 = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
+00000000000000000000000A = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000000C,00000000000000000000000D); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+00000000000000000000000B = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000000E,00000000000000000000000F); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+00000000000000000000000C = {isa = XCBuildConfiguration; baseConfigurationReference = 000000000000000000000008; buildSettings = {SDKROOT = iphoneos; CLANG_ENABLE_MODULES = YES; SWIFT_OPTIMIZATION_LEVEL = "-Onone";}; name = Debug; };
+00000000000000000000000D = {isa = XCBuildConfiguration; baseConfigurationReference = 000000000000000000000008; buildSettings = {SDKROOT = iphoneos; CLANG_ENABLE_MODULES = YES; SWIFT_OPTIMIZATION_LEVEL = "-Onone";}; name = Release; };
+00000000000000000000000E = {isa = XCBuildConfiguration; baseConfigurationReference = 000000000000000000000008; buildSettings = {INFOPLIST_FILE = WeAware/Info.plist; PRODUCT_NAME = "$(TARGET_NAME)"; TARGETED_DEVICE_FAMILY = "1,2"; CODE_SIGN_STYLE = Automatic; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = NO;}; name = Debug; };
+00000000000000000000000F = {isa = XCBuildConfiguration; baseConfigurationReference = 000000000000000000000008; buildSettings = {INFOPLIST_FILE = WeAware/Info.plist; PRODUCT_NAME = "$(TARGET_NAME)"; TARGETED_DEVICE_FAMILY = "1,2"; CODE_SIGN_STYLE = Automatic; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = NO;}; name = Release; };
+}; rootObject = 000000000000000000000001; }
