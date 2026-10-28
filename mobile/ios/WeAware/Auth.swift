@@ -10,10 +10,10 @@ import CryptoKit
     private var session: ASWebAuthenticationSession?
     override init() { super.init(); if let data = Keychain.read(), let json = try? JSONSerialization.jsonObject(with: data) as? [String: String] { refreshToken = json["refreshToken"] ?? ""; Task { try? await reload() } } }
     func firebase(_ operation: String, _ body: [String: Any]) async throws -> [String: Any] {
-        guard !AppConfig.firebaseKey.isEmpty, !AppConfig.firebaseKey.hasPrefix("REPLACE") else { throw APIError(message: "Add your Firebase API key in Config.xcconfig to enable sign-in.") }
+        guard !AppConfig.firebaseKey.isEmpty, !AppConfig.firebaseKey.hasPrefix("REPLACE") else { throw APIError(message: "Add your Firebase API key in Config.local.xcconfig to enable sign-in.") }
         let expected = generation
         let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:\(operation)?key=\(AppConfig.firebaseKey)")!
-        var request = URLRequest(url: url); request.httpMethod = "POST"; request.setValue("application/json", forHTTPHeaderField: "Content-Type"); request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let request = try FirebaseAuthRequest.make(url: url, body: body)
         let (data, response) = try await URLSession.shared.data(for: request)
         guard generation == expected else { throw CancellationError() }
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
@@ -33,9 +33,10 @@ import CryptoKit
         if expires > Date() { return idToken }
         guard !refreshToken.isEmpty else { throw APIError(message: "Sign in to continue.") }
         let expected = generation
-        var request = URLRequest(url: URL(string: "https://securetoken.googleapis.com/v1/token?key=\(AppConfig.firebaseKey)")!)
-        request.httpMethod = "POST"; request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["grant_type": "refresh_token", "refresh_token": refreshToken])
+        let request = try FirebaseAuthRequest.make(
+            url: URL(string: "https://securetoken.googleapis.com/v1/token?key=\(AppConfig.firebaseKey)")!,
+            body: ["grant_type": "refresh_token", "refresh_token": refreshToken]
+        )
         let (data, response) = try await URLSession.shared.data(for: request)
         guard generation == expected else { throw CancellationError() }
         guard (response as? HTTPURLResponse)?.statusCode == 200, let json = try JSONSerialization.jsonObject(with: data) as? [String: Any], let token = json["id_token"] as? String else { signOut(); throw APIError(message: "Your session expired. Sign in again.") }

@@ -1,0 +1,4 @@
+// Copy to Config.local.xcconfig and supply the current restricted iOS key.
+FIREBASE_API_KEY = REPLACE_WITH_IOS_FIREBASE_API_KEY
+GOOGLE_CLIENT_ID = REPLACE_WITH_IOS_OAUTH_CLIENT_ID
+GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.REPLACE_WITH_REVERSED_CLIENT_ID

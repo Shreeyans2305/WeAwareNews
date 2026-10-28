@@ -25,3 +25,21 @@ struct API {
     }
     static func id(_ value: String) -> String { value.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? value }
 }
+
+// Both Firebase auth and token refresh must identify this app for restricted keys.
+enum FirebaseAuthRequest {
+    static func make(url: URL, body: [String: Any], bundleID: String = Bundle.main.bundleIdentifier ?? "") throws -> URLRequest {
+        guard url.scheme == "https",
+              ["identitytoolkit.googleapis.com", "securetoken.googleapis.com"].contains(url.host ?? ""),
+              !bundleID.isEmpty else {
+            throw APIError(message: "Firebase authentication configuration is invalid.")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 45
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(bundleID, forHTTPHeaderField: "X-Ios-Bundle-Identifier")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return request
+    }
+}

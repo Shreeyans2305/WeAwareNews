@@ -1,8 +1,10 @@
-// Public application identifiers only; never place service-account secrets here.
+// Shared build settings only. Live Firebase settings belong in Config.local.xcconfig.
 API_ORIGIN = https:/$()/weaware-api-777322408950.us-central1.run.app
-FIREBASE_API_KEY = REDACTED_REVOKED_IOS_API_KEY
-GOOGLE_CLIENT_ID = 1078996512273-of2qev1bb6t5b32sp68sq6l9psu737bl.apps.googleusercontent.com
-GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.1078996512273-of2qev1bb6t5b32sp68sq6l9psu737bl
+FIREBASE_API_KEY =
+GOOGLE_CLIENT_ID =
+GOOGLE_REVERSED_CLIENT_ID =
 PRODUCT_BUNDLE_IDENTIFIER = news.weaware.ios
 IPHONEOS_DEPLOYMENT_TARGET = 17.0
 SWIFT_VERSION = 5.0
+
+#include? "Config.local.xcconfig"

@@ -15,7 +15,7 @@ Public reading and podcasts work without Firebase settings. The default API is t
 
 ## Connected accounts
 
-This app is registered in the website's Firebase project `weaware-3504c` as `news.weaware.weaware`. The checked-in `android/app/google-services.json` contains public Firebase client settings and Google OAuth client IDs. The Google Services Gradle plugin configures Firebase and Google sign-in automatically; `flutter run` needs no Firebase build flags.
+This app is registered in the website's Firebase project `weaware-3504c` as `news.weaware.weaware`. Download `google-services.json` from Firebase into `android/app/`; this live configuration is ignored by Git. `google-services.example.json` documents its structure. The Google Services plugin applies only when the local file exists, so public reading still builds without account configuration. With the local file, Firebase and Google sign-in are configured automatically.
 
 The current Mac's Android debug SHA-1 and SHA-256 certificates are registered. A different development machine or production signing key requires registering that key's certificate fingerprints in Firebase and downloading the updated configuration. Email/password and Google providers are enabled. Never include a service-account key, OAuth client secret, or server credential in this app.
 

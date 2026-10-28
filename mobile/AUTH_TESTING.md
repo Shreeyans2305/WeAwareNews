@@ -4,8 +4,8 @@ Both apps use the website Firebase project `weaware-3504c` and existing website 
 
 ## Configuration
 
-- Android package: `news.weaware.weaware`. This Mac’s debug SHA-1/SHA-256 are registered. Google Services reads `android/app/google-services.json`; no Firebase build flags are needed.
-- iOS bundle: `news.weaware.ios`. `Config.xcconfig` contains the public API key, iOS OAuth client and reversed callback scheme, sourced from the downloaded `GoogleService-Info.plist`.
+- Android package: `news.weaware.weaware`. This Mac’s debug SHA-1/SHA-256 are registered. Google Services reads the ignored local `android/app/google-services.json`; no Firebase build flags are needed.
+- iOS bundle: `news.weaware.ios`. Ignored `Config.local.xcconfig` supplies the restricted API key, iOS OAuth client and reversed callback scheme. Copy its `.example` template for a new checkout.
 
 ## Try the account features
 
@@ -18,3 +18,25 @@ Both apps use the website Firebase project `weaware-3504c` and existing website 
 The iOS Google flow was checked through Google’s login screen; Android Firebase initialization succeeded. Full authentication and private feature checks require you to finish signing in. No passwords were entered, test users created, email sent, or research credits used during configuration.
 
 For another development Mac, register its Android debug signing fingerprints in Firebase. Before distribution register production signing fingerprints, configure Apple signing, and complete physical-device testing. Configuration follows [Firebase’s Android setup](https://firebase.google.com/docs/android/setup) and [Google’s iOS client/callback setup](https://developers.google.com/identity/sign-in/ios/start-integrating).
+
+## Configuration protection
+
+Live platform configs stay local; templates are committed. Run `python3 mobile/scripts/check_config.py --staged` before committing. CI checks tracked mobile files for credential literals and accidentally tracked live config files. Client keys remain embedded in compiled apps: application and API restrictions are the primary protection, not Git ignore rules. The exposed iOS key was replaced; rebuild installed apps after rotation. Passwords and OAuth client IDs do not change.
+
+Run the iOS request regression checks with:
+
+```sh
+swiftc mobile/ios/WeAware/API.swift mobile/ios/Tests/main.swift -o /tmp/weaware-auth-tests
+/tmp/weaware-auth-tests
+```
+
+## Rotation validation (2026-10-29)
+
+- Replacement iOS key restricted to `news.weaware.ios`, Identity Toolkit and Secure Token APIs.
+- Live requests with the correct bundle header reach token validation; wrong or missing bundle headers are rejected with `API_KEY_IOS_APP_BLOCKED` on both services.
+- Deleted previous key is rejected with `API_KEY_INVALID` on both services.
+- Swift request regression checks, iOS simulator build, Flutter analysis and four Flutter tests passed. Both platforms also build without local configs.
+- Configured builds installed and launched on Android and iOS simulators; public feed smoke checked and Android Firebase initialization confirmed.
+- Full Google/email account sign-in and private account actions still require a test account. No passwords, emails, research credits, or editorial actions were used for this security check.
+
+The prior key remains in historical commits but is revoked. This change removes live configs from the current tree without rewriting shared Git history.

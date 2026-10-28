@@ -6,3 +6,6 @@ xcuserdata/
 # Local previews and unused Firebase reference export.
 screenshots/
 GoogleService-Info.plist
+
+# Live Firebase/OAuth build settings.
+/Config.local.xcconfig

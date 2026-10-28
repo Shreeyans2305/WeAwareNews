@@ -9,3 +9,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Download locally from Firebase; never commit live client configuration.
+**/google-services.json

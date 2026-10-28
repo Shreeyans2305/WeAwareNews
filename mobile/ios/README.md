@@ -4,15 +4,9 @@ Native SwiftUI application for iOS 17 and later. Open `WeAware.xcodeproj` in Xco
 
 ## Configuration
 
-The app is registered as `news.weaware.ios` in the website’s Firebase project `weaware-3504c`. `Config.xcconfig` contains the public settings from the official Firebase client configuration. The app reads these build settings directly, so no additional Firebase plist is needed. Email/password and Google providers are enabled. No Firebase configuration is needed to run this simulator build.
+The app is registered as `news.weaware.ios` in Firebase project `weaware-3504c`. Copy `Config.local.xcconfig.example` to `Config.local.xcconfig` and supply the current iOS Firebase API key, iOS OAuth client ID, and reversed callback scheme. The local file is ignored by Git and optionally included by the shared `Config.xcconfig`. No Firebase plist is required. Without local settings, public reading works and account features request configuration.
 
-For another Firebase project, update these public application settings in `Config.xcconfig`:
-
-- `FIREBASE_API_KEY`: Firebase project's web API key. This is an application identifier, not a service-account credential.
-- `GOOGLE_CLIENT_ID`: OAuth iOS client ID registered for this app's bundle ID.
-- `GOOGLE_REVERSED_CLIENT_ID`: reversed client ID callback scheme (for example `com.googleusercontent.apps.123-example`).
-- `PRODUCT_BUNDLE_IDENTIFIER`: match the registered iOS application.
-- `API_ORIGIN`: keep the `https:/$()/` syntax because `//` otherwise begins an xcconfig comment.
+Restrict the iOS key to bundle ID `news.weaware.ios` and APIs `identitytoolkit.googleapis.com` and `securetoken.googleapis.com`. Both authentication and refresh requests send `X-Ios-Bundle-Identifier`. Keep the `https:/$()/` syntax for `API_ORIGIN` because `//` starts an xcconfig comment. Never add administrator credentials or OAuth client secrets.
 
 Enable email/password and Google providers in the existing Firebase project. Email verification and password resets use Firebase's configured action URLs. Google sign-in uses the system authentication browser with PKCE, validates OAuth state, then exchanges the Google identity for a Firebase session. Refresh tokens are stored in Keychain with this-device-only protection. Tokens are refreshed before protected requests; verification reload explicitly refreshes the token.
 
