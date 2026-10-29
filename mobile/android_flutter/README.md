@@ -24,6 +24,7 @@ Optional `FIREBASE_*` and `GOOGLE_WEB_CLIENT_ID` build flags remain available fo
 ## Implemented
 
 - Topic chips, explicit search submission, pull to refresh, pagination, and website-equivalent three readable guest stories with nine preview cards.
+- Discover swipe cards: left skips, right saves, with undo, a saved library, three verbatim key points, consensus, source notes and full-reader access. Decisions persist locally and are isolated per account; guests have a separate library.
 - Full mobile reader with source stance/notes/original links, agreement signal, flagged claims, publication metadata, original artwork, native sharing and disclosures.
 - Shared foreground audio player across tabs, article narration request/polling, playback, seek, speed, queue and previous/next controls. Leaving an article does not dispose the player; controls remain on the main screen.
 - Published podcast catalog, playback, RSS copy and session-local likes. Transcript and source fields render when included by the API.
@@ -41,8 +42,20 @@ flutter test
 flutter build apk --debug
 ```
 
-Tests cover feed query encoding, structured research denials, preventing unauthenticated private calls, guest navigation and light/dark selection. Firebase is configured. Use your existing website account to exercise sign-in, account-scoped data, email delivery and invited research on a device. Do not generate billable research or editorial publication merely to smoke-test a build.
+Tests cover account creation mode, Google success/failure/retry, visible restored sessions, sign-out, Discover decisions/undo/persistence/account isolation, factual excerpts, feed requests, private-call guards and guest navigation. Firebase is configured. Use your existing website account to exercise sign-in, account-scoped data, email delivery and invited research on a device. Do not generate billable research or editorial publication merely to smoke-test a build.
 
 ## Remaining release work
 
 Register the production signing certificates and supply a final application identifier if different, final branding assets, release signing and Play Store metadata. The generated release Gradle configuration currently uses a **debug signing key** and must be changed before distribution. Foreground playback is implemented; Android background media service/notification/lock-screen playback is not yet enabled. App links for incoming shared stories require domain association and a routing implementation. This initial app does not add offline article caching or push notifications, which are not website features. No store upload or backend deployment is part of this scaffold.
+
+## Native account persistence check
+
+Start Firebase Auth Emulator on port 9099 using the local Firebase CLI configuration. The Android debug configuration permits HTTP only to the loopback/emulator host; release traffic remains HTTPS. Run against a disposable Android emulator with the ignored Firebase configuration installed:
+
+```sh
+flutter drive --keep-app-running --driver=test_driver/integration_test.dart --target=integration_test/auth_persistence_test.dart -d emulator-5554 --dart-define=AUTH_TEST_PHASE=seed
+adb shell am force-stop news.weaware.weaware
+flutter drive --keep-app-running --driver=test_driver/integration_test.dart --target=integration_test/auth_persistence_test.dart -d emulator-5554 --dart-define=AUTH_TEST_PHASE=restore
+```
+
+Seed creates a local fake account, signs out and back in; restore checks the native saved user and token, then signs out. Reset the local Auth Emulator accounts before repeating seed. Do not use `flutter test` for the two-phase check: it uninstalls the app between runs. Rebuild and install `lib/main.dart` after integration testing. Live Google account selection and production sign-in require a separate manual check with the account owner. On 2026-10-29, the API 36.1 Google Play emulator completed live Google sign-in, displayed the verified account immediately, and retained that account after force-stop/relaunch. Native emulator seed/restore checks and all 12 Flutter tests also passed.

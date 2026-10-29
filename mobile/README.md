@@ -36,6 +36,10 @@ Private calls use `Authorization: Bearer <Firebase ID token>`. The backend remai
 
 The website's friend-to-friend activity feed is explicitly a frontend mock and has no delivery API. Video generation is an operational pipeline, not a public website viewing feature. Neither should be presented as a working mobile service.
 
+## Discover
+
+Android has a Discover tab; iOS opens Discover from the cards button on News. Swipe left to skip or right to save. Both offer explicit buttons, undo, a saved library, source agreement, source evidence and full reporting. Cards show up to three verbatim sentences from the article body (summary fallback), preserving attribution and uncertainty. They do not generate new factual claims. Saved stories and decisions persist on this device separately for each account and guest; they do not sync between platforms or change the server feed ranking.
+
 ## Manual acceptance checks
 
 1. Launch without Firebase configuration: public news and podcasts remain available, and sign-in explains the required setup.
@@ -46,7 +50,8 @@ The website's friend-to-friend activity feed is explicitly a frontend mock and h
 6. Save daily/weekly newsletter preferences with explicit consent, reopen them, and unsubscribe using a test account.
 7. For an entitled verified test account, submit a specific research question with brief/standard/detailed length, inspect processing status/history, cancel an eligible request, and open a completed report with evidence and PDF sharing.
 8. Test editorial actions only with an authorized editor and an intentionally prepared test draft; approval initiates real audio work.
-9. Check light/dark appearance, larger system text, small screens, network failure, empty results, and re-entry after backgrounding.
+9. In Discover, save and skip cards, undo, reopen Saved after an app restart, inspect evidence and confirm a different account has its own library.
+10. Check light/dark appearance, larger system text, small screens, network failure, empty results, and re-entry after backgrounding.
 
 ## Release work
 

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'auth_service.dart';
 
 const apiBase = String.fromEnvironment(
   'API_BASE_URL',
@@ -9,11 +10,13 @@ const apiBase = String.fromEnvironment(
 typedef Json = Map<String, dynamic>;
 
 class Api {
-  Api({http.Client? client, this.authReady = false})
-    : client = client ?? http.Client();
+  Api({http.Client? client, this.authReady = false, AccountAuth? accountAuth})
+    : client = client ?? http.Client(),
+      accountAuth = accountAuth ?? (authReady ? FirebaseAccountAuth() : null);
   final http.Client client;
   final bool authReady;
-  User? get user => authReady ? FirebaseAuth.instance.currentUser : null;
+  final AccountAuth? accountAuth;
+  User? get user => authReady ? accountAuth?.currentUser : null;
   Future<http.Response> response(
     String path, {
     String method = 'GET',

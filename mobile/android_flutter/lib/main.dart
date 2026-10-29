@@ -4,12 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'auth_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'api.dart';
+import 'discover.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -127,12 +128,13 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
   int tab = 0;
+  bool discoverOpened = false;
   StreamSubscription<User?>? auth;
   @override
   void initState() {
     super.initState();
     if (widget.api.authReady) {
-      auth = FirebaseAuth.instance.authStateChanges().listen((_) {
+      auth = widget.api.accountAuth!.userChanges().listen((_) {
         audioDesk.close();
         if (mounted) setState(() {});
       });
@@ -188,6 +190,23 @@ class _HomeState extends State<Home> {
         index: tab,
         children: [
           Feed(api: api),
+          if (discoverOpened)
+            Discover(
+              key: ValueKey('discover-${api.user?.uid ?? 'guest'}'),
+              api: api,
+              onOpen: (article) => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => Reader(api: api, article: article),
+                ),
+              ),
+              onSignIn: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => Account(api: api)),
+              ),
+            )
+          else
+            const SizedBox.shrink(),
           Podcasts(api: api),
           Newsletter(key: ValueKey("newsletter-${api.user?.uid}"), api: api),
           Research(key: ValueKey("research-${api.user?.uid}"), api: api),
@@ -199,9 +218,16 @@ class _HomeState extends State<Home> {
           const AudioControls(compact: true),
           NavigationBar(
             selectedIndex: tab,
-            onDestinationSelected: (i) => setState(() => tab = i),
+            onDestinationSelected: (i) => setState(() {
+              tab = i;
+              if (i == 1) discoverOpened = true;
+            }),
             destinations: const [
               NavigationDestination(icon: Icon(Icons.newspaper), label: 'News'),
+              NavigationDestination(
+                icon: Icon(Icons.swipe_outlined),
+                label: 'Discover',
+              ),
               NavigationDestination(
                 icon: Icon(Icons.headphones),
                 label: 'Listen',
@@ -842,20 +868,53 @@ class Account extends StatefulWidget {
 class _AccountState extends State<Account> {
   final email = TextEditingController(), password = TextEditingController();
   bool busy = false, register = false;
+  String message = '';
+  StreamSubscription<User?>? subscription;
+  String? owner;
+  @override
+  void initState() {
+    super.initState();
+    owner = widget.api.user?.uid;
+    subscription = widget.api.accountAuth?.userChanges().listen((user) {
+      if (!mounted) return;
+      setState(() {
+        if (user?.uid != owner) {
+          owner = user?.uid;
+          register = false;
+          password.clear();
+          message = '';
+        }
+      });
+    });
+  }
+
   @override
   void dispose() {
+    subscription?.cancel();
     email.dispose();
     password.dispose();
     super.dispose();
   }
 
-  Future<void> act(Future<void> Function() action) async {
-    setState(() => busy = true);
+  Future<void> act(Future<String?> Function() action) async {
+    if (busy) return;
+    setState(() {
+      busy = true;
+      message = '';
+    });
     try {
-      await action();
-      if (mounted) setState(() {});
-    } catch (e) {
-      if (mounted) notice(context, e);
+      final result = await action();
+      if (mounted) {
+        setState(() {
+          message = result ?? '';
+          if (widget.api.user != null) {
+            register = false;
+            password.clear();
+          }
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => message = accountError(error));
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -864,17 +923,22 @@ class _AccountState extends State<Account> {
   @override
   Widget build(BuildContext context) {
     final user = widget.api.user;
+    final auth = widget.api.accountAuth;
     return Scaffold(
       appBar: AppBar(title: const Text('Your account')),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
           heading(
-            user == null ? 'A clearer view starts here.' : 'Welcome back.',
+            user != null
+                ? 'Signed in'
+                : register
+                ? 'Create your WeAware account'
+                : 'Sign in to WeAware',
           ),
           if (!widget.api.authReady)
             copy(
-              'Account sign-in needs this Android app’s Firebase configuration. Public news and podcasts are available now. See the setup guide to connect the existing WeAware Firebase project.',
+              'Account sign-in needs this Android app’s Firebase configuration. Public news and podcasts are available. See the setup guide to connect Firebase.',
             ),
           if (user != null) ...[
             copy(user.email ?? 'Signed in'),
@@ -888,10 +952,8 @@ class _AccountState extends State<Account> {
                 onPressed: busy
                     ? null
                     : () => act(() async {
-                        await user.sendEmailVerification();
-                        if (context.mounted) {
-                          notice(context, 'Verification email sent.');
-                        }
+                        await auth!.verifyEmail();
+                        return 'Verification email sent.';
                       }),
                 child: const Text('Send verification email'),
               ),
@@ -899,15 +961,18 @@ class _AccountState extends State<Account> {
               onPressed: busy
                   ? null
                   : () => act(() async {
-                      await user.reload();
-                      await FirebaseAuth.instance.currentUser?.getIdToken(true);
+                      await auth!.refresh();
+                      return 'Account refreshed.';
                     }),
               child: const Text('Refresh verification'),
             ),
             FilledButton(
               onPressed: busy
                   ? null
-                  : () => act(() => FirebaseAuth.instance.signOut()),
+                  : () => act(() async {
+                      await auth!.signOut();
+                      return null;
+                    }),
               child: const Text('Sign out'),
             ),
             OutlinedButton(
@@ -919,41 +984,50 @@ class _AccountState extends State<Account> {
             ),
           ] else ...[
             TextField(
+              key: const Key('auth.email'),
               controller: email,
               keyboardType: TextInputType.emailAddress,
+              textCapitalization: TextCapitalization.none,
+              autocorrect: false,
               autofillHints: const [AutofillHints.email],
               decoration: const InputDecoration(labelText: 'Email'),
             ),
             const SizedBox(height: 12),
             TextField(
+              key: const Key('auth.password'),
               controller: password,
               obscureText: true,
-              autofillHints: const [AutofillHints.password],
+              autofillHints: [
+                register ? AutofillHints.newPassword : AutofillHints.password,
+              ],
               decoration: const InputDecoration(labelText: 'Password'),
             ),
             const SizedBox(height: 16),
             FilledButton(
+              key: const Key('auth.submit'),
               onPressed: !widget.api.authReady || busy
                   ? null
                   : () => act(() async {
-                      if (register) {
-                        final result = await FirebaseAuth.instance
-                            .createUserWithEmailAndPassword(
-                              email: email.text.trim(),
-                              password: password.text,
-                            );
-                        await result.user?.sendEmailVerification();
-                      } else {
-                        await FirebaseAuth.instance.signInWithEmailAndPassword(
-                          email: email.text.trim(),
-                          password: password.text,
-                        );
+                      final address = email.text.trim();
+                      final secret = password.text;
+                      if (address.isEmpty || secret.isEmpty) {
+                        throw Exception('Enter your email and password.');
                       }
+                      if (register) return auth!.createAccount(address, secret);
+                      await auth!.signIn(address, secret);
+                      return null;
                     }),
               child: Text(register ? 'Create account' : 'Sign in'),
             ),
             TextButton(
-              onPressed: () => setState(() => register = !register),
+              key: const Key('auth.mode'),
+              onPressed: busy
+                  ? null
+                  : () => setState(() {
+                      register = !register;
+                      message = '';
+                      password.clear();
+                    }),
               child: Text(
                 register
                     ? 'Already have an account? Sign in'
@@ -961,25 +1035,12 @@ class _AccountState extends State<Account> {
               ),
             ),
             OutlinedButton.icon(
+              key: const Key('auth.google'),
               onPressed: !widget.api.authReady || busy
                   ? null
                   : () => act(() async {
-                      const serverClientId = String.fromEnvironment(
-                        'GOOGLE_WEB_CLIENT_ID',
-                      );
-                      await GoogleSignIn.instance.initialize(
-                        serverClientId: serverClientId.isEmpty
-                            ? null
-                            : serverClientId,
-                      );
-                      final account = await GoogleSignIn.instance
-                          .authenticate();
-                      final credential = GoogleAuthProvider.credential(
-                        idToken: account.authentication.idToken,
-                      );
-                      await FirebaseAuth.instance.signInWithCredential(
-                        credential,
-                      );
+                      await auth!.google();
+                      return null;
                     }),
               icon: const Icon(Icons.login),
               label: const Text('Continue with Google'),
@@ -991,20 +1052,22 @@ class _AccountState extends State<Account> {
                       if (email.text.trim().isEmpty) {
                         throw Exception('Enter your email first.');
                       }
-                      await FirebaseAuth.instance.sendPasswordResetEmail(
-                        email: email.text.trim(),
-                      );
-                      if (context.mounted) {
-                        notice(
-                          context,
-                          'Password reset email requested. Check your inbox.',
-                        );
-                      }
+                      await auth!.resetPassword(email.text.trim());
+                      return 'Password reset email requested. Check your inbox.';
                     }),
               child: const Text('Reset password'),
             ),
           ],
           if (busy) const LinearProgressIndicator(),
+          if (message.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                message,
+                key: const Key('auth.message'),
+                semanticsLabel: message,
+              ),
+            ),
           const Divider(height: 40),
           heading('About WeAware'),
           copy(
