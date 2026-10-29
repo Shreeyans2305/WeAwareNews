@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeftRight, ArrowUpRight, Moon, Sun } from 'lucide-react'
 import { fetchArticle, fetchArticles, fetchTopics, prioritizeStoriesWithImages, toStory } from './lib/api.js'
 import { ThemeProvider, useTheme } from './theme.js'
@@ -123,8 +123,59 @@ const PERSPECTIVES = [
 function PerspectiveSection() {
   const [balance, setBalance] = useState(50)
   const [activeSource, setActiveSource] = useState(null)
+  const visualRef = useRef(null)
+  const previewRef = useRef(null)
+  const pointerPositionRef = useRef(null)
+  const pointerFrameRef = useRef(null)
 
-  const showSource = (index) => setActiveSource(index)
+  const showSource = (index) => setActiveSource((current) => current === index ? current : index)
+  const positionPreviewAtPointer = (clientX, clientY) => {
+    const bounds = visualRef.current?.getBoundingClientRect()
+    const preview = previewRef.current
+    if (!bounds || !preview) return
+    preview.classList.add('is-following-cursor')
+
+    const pointerX = clientX - bounds.left
+    const pointerY = clientY - bounds.top
+    const previewWidth = preview.offsetWidth
+    const previewHeight = preview.offsetHeight
+    const gap = 16
+    let x = pointerX + gap
+    let y = pointerY + gap
+
+    if (x + previewWidth > bounds.width - 8) x = pointerX - previewWidth - gap
+    if (y + previewHeight > bounds.height - 8) y = pointerY - previewHeight - gap
+
+    preview.style.setProperty('--preview-x', `${Math.max(8, Math.min(x, bounds.width - previewWidth - 8))}px`)
+    preview.style.setProperty('--preview-y', `${Math.max(8, Math.min(y, bounds.height - previewHeight - 8))}px`)
+  }
+
+  const showSourceAtPointer = (event) => {
+    const bounds = visualRef.current?.getBoundingClientRect()
+    if (!bounds || event.target.closest('.perspective-slider-wrap')) return
+    pointerPositionRef.current = { x: event.clientX, y: event.clientY }
+    if (pointerFrameRef.current === null) {
+      pointerFrameRef.current = requestAnimationFrame(() => {
+        pointerFrameRef.current = null
+        if (pointerPositionRef.current) {
+          positionPreviewAtPointer(pointerPositionRef.current.x, pointerPositionRef.current.y)
+        }
+      })
+    }
+    const splitX = bounds.left + bounds.width * (balance / 100)
+    showSource(event.clientX < splitX ? 0 : 1)
+  }
+
+  useLayoutEffect(() => {
+    if (activeSource !== null && pointerPositionRef.current) {
+      positionPreviewAtPointer(pointerPositionRef.current.x, pointerPositionRef.current.y)
+    }
+  }, [activeSource])
+
+  useEffect(() => () => {
+    if (pointerFrameRef.current !== null) cancelAnimationFrame(pointerFrameRef.current)
+  }, [])
+
   const handleSourceKeyDown = (event, index) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
@@ -143,7 +194,10 @@ function PerspectiveSection() {
         <div
           className="perspective-layout"
           style={{ '--perspective-split': `${balance}%` }}
-          onMouseLeave={() => setActiveSource(null)}
+          onMouseLeave={() => {
+            setActiveSource(null)
+            pointerPositionRef.current = null
+          }}
           onBlurCapture={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget)) setActiveSource(null)
           }}
@@ -168,26 +222,22 @@ function PerspectiveSection() {
           </article>
 
           <figure
+            ref={visualRef}
             className={`perspective-visual ${activeSource !== null ? 'has-source-preview' : ''}`}
-            onMouseMove={(event) => {
-              if (event.target.closest('.perspective-slider-wrap, .perspective-source-preview')) return
-              const bounds = event.currentTarget.getBoundingClientRect()
-              const splitX = bounds.left + bounds.width * (balance / 100)
-              showSource(event.clientX < splitX ? 0 : 1)
-            }}
-            onClick={(event) => {
-              if (event.target.closest('.perspective-slider-wrap, .perspective-source-preview')) return
-              const bounds = event.currentTarget.getBoundingClientRect()
-              const splitX = bounds.left + bounds.width * (balance / 100)
-              showSource(event.clientX < splitX ? 0 : 1)
-            }}
+            onMouseMove={showSourceAtPointer}
+            onClick={showSourceAtPointer}
           >
             <img src="/LeftRight.png" alt="A tall office building viewed from below" />
             <div className="perspective-tint perspective-tint-first" aria-hidden="true" />
             <div className="perspective-tint perspective-tint-second" aria-hidden="true" />
             <div className="perspective-divider" aria-hidden="true" />
             {activeSource !== null && (
-              <aside className={`perspective-source-preview perspective-source-preview-${activeSource === 0 ? 'first' : 'second'}`} role="status" aria-live="polite">
+              <aside
+                ref={previewRef}
+                className={`perspective-source-preview perspective-source-preview-${activeSource === 0 ? 'first' : 'second'}${pointerPositionRef.current ? ' is-following-cursor' : ''}`}
+                role="status"
+                aria-live="polite"
+              >
                 <img src={PERSPECTIVES[activeSource].reportImage} alt={PERSPECTIVES[activeSource].reportImageAlt} />
                 <div className="perspective-source-preview-copy">
                   <p className="perspective-source-preview-outlet">

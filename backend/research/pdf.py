@@ -45,8 +45,9 @@ def _safe_link(value):
     return None
 
 
-def render_report_pdf(investigation):
-    if investigation.get('status') != 'completed' or not investigation.get('report'):
+def render_report_pdf(investigation, *, editor_preview=False):
+    allowed_status = 'awaiting_review' if editor_preview else 'completed'
+    if investigation.get('status') != allowed_status or not investigation.get('report'):
         raise ValueError('Only editor-approved reports can be exported')
     _fonts()
     from reportlab.lib import colors
@@ -81,7 +82,7 @@ def render_report_pdf(investigation):
     story = [paragraph('WEAWARE / SHERLOCK MODE / JOURNALIST JEFF', 'eyebrow'),
              paragraph(report['title'], 'title'),
              paragraph('%s report  |  %s words of analysis  |  About %s min read' % (length['label'], word_count, minutes), 'small'),
-             paragraph('Private research brief - editor approved. Research cutoff: ' + cutoff, 'small'),
+             paragraph(('EDITOR REVIEW COPY - NOT APPROVED. Research cutoff: ' if editor_preview else 'Private research brief - editor approved. Research cutoff: ') + cutoff, 'small'),
              HRFlowable(width='100%', thickness=0.7, color=accent, spaceBefore=7, spaceAfter=16),
              paragraph('The question', 'heading'), paragraph(investigation.get('question', report['title']))]
     if investigation.get('scope'):
@@ -124,7 +125,7 @@ def render_report_pdf(investigation):
         # next page rather than shrinking type or producing a separate cover.
         story.extend([KeepTogether(parts), Spacer(1, 7)])
     story += [Spacer(1, 12), HRFlowable(width='100%', thickness=0.5, color=colors.HexColor('#d8dcda'), spaceAfter=10),
-              paragraph(report.get('disclosure', 'Prepared by Journalist Jeff, an AI assistant, and reviewed by a WeAware pilot editor. Research may be incomplete or contain errors.'), 'small')]
+              paragraph('Drafted by Journalist Jeff, an AI assistant. Awaiting human editor approval; do not treat as a delivered or approved report.' if editor_preview else report.get('disclosure', 'Prepared by Journalist Jeff, an AI assistant, and reviewed by a WeAware pilot editor. Research may be incomplete or contain errors.'), 'small')]
 
     def page_frame(canvas, doc):
         width, height = A4
@@ -136,13 +137,13 @@ def render_report_pdf(investigation):
         canvas.setStrokeColor(colors.HexColor('#d8dcda'))
         canvas.setLineWidth(0.4)
         canvas.line(52, 40, width-52, 40)
-        canvas.drawString(52, 27, 'Private research brief | Journalist Jeff')
+        canvas.drawString(52, 27, 'EDITOR COPY - NOT APPROVED' if editor_preview else 'Private research brief | Journalist Jeff')
         canvas.drawRightString(width-52, 27, 'Page %s' % doc.page)
         canvas.restoreState()
 
     output = BytesIO()
     document = SimpleDocTemplate(output, pagesize=A4, rightMargin=52, leftMargin=52, topMargin=50, bottomMargin=55,
                                  title=_plain(report['title']), author='WeAware / Journalist Jeff',
-                                 subject='Private, editor-approved research brief', pageCompression=1)
+                                 subject='Unapproved editor review copy' if editor_preview else 'Private, editor-approved research brief', pageCompression=1)
     document.build(story, onFirstPage=page_frame, onLaterPages=page_frame)
     return output.getvalue()

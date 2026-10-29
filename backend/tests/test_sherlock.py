@@ -88,13 +88,24 @@ class QualityTests(unittest.TestCase):
         with self.assertRaises(ResearchError):
             validate_report(report, evidence, sources)
 
+    def test_evidence_selects_only_existing_verbatim_passages(self):
+        from research.pipeline import evidence_passages, resolve_evidence_passages
+        sources, evidence, _ = fixtures()
+        payload, lookup = evidence_passages(sources)
+        self.assertNotIn('text', payload[0])
+        selected = {'claims':[{'evidence':[{'sourceId':'S1','passageId':'P1','quote':'fabricated wording'}]}]}
+        resolved = resolve_evidence_passages(selected, lookup)
+        self.assertEqual(resolved['claims'][0]['evidence'][0]['quote'], sources[0]['text'])
+        selected['claims'][0]['evidence'][0]['passageId'] = 'invented'
+        with self.assertRaises(ResearchError):resolve_evidence_passages(selected, lookup)
+
     def test_full_pipeline_requires_review(self):
         sources, evidence, report = fixtures()
         provider, store = MagicMock(), MagicMock()
         provider.deadline = float('inf')
         provider.generate.side_effect = [
             {'safe': True, 'queries': ['Question investigation %s' % i for i in range(6)]},
-            evidence, report,
+            {**evidence, 'claims':[{**c, 'evidence':[{'sourceId':q['sourceId'], 'passageId':'P1'} for q in c['evidence']]} for c in evidence['claims']]}, report,
             {'approved': True, 'issues': [], 'supportedClaimIds': ['C%s' % i for i in range(1, 9)],
              'independentOrigins': 6, 'primarySourcePresent': True}]
         provider.search.side_effect = [[{'url': s['url']}] for s in sources]
@@ -115,7 +126,7 @@ class QualityTests(unittest.TestCase):
             provider, store = MagicMock(), MagicMock()
             provider.deadline = float('inf')
             provider.generate.side_effect = [{'safe': True, 'queries': ['Research question %s' % i for i in range(6)]},
-                evidence, report, {'approved': True, 'issues': [], 'supportedClaimIds': ['C%s' % i for i in range(1, 9)],
+                {**evidence, 'claims':[{**c, 'evidence':[{'sourceId':q['sourceId'], 'passageId':'P1'} for q in c['evidence']]} for c in evidence['claims']]}, report, {'approved': True, 'issues': [], 'supportedClaimIds': ['C%s' % i for i in range(1, 9)],
                                    'independentOrigins': 6, 'primarySourcePresent': True}]
             provider.search.side_effect = [[{'url': s['url']}] for s in sources]
             source_map = {s['url']: s for s in sources}
@@ -133,48 +144,105 @@ class QualityTests(unittest.TestCase):
 
     def test_provider_reserves_before_call_and_accounts_for_thinking(self):
         config = {'SHERLOCK_PAID_CALLS_ENABLED': 'true', 'SHERLOCK_RATES_VERIFIED': 'true',
-                  'SHERLOCK_MODEL': 'gemini-2.5-flash', 'GOOGLE_CLOUD_PROJECT': 'test-project',
+                  'SHERLOCK_MODEL': 'gemini-3.5-flash-lite', 'GOOGLE_CLOUD_PROJECT': 'test-project',
                   'SHERLOCK_SEARCH_PROVIDER': 'brave', 'SHERLOCK_BRAVE_API_KEY': 'test-key', 'SHERLOCK_INPUT_USD_PER_MILLION': '1',
-                  'SHERLOCK_OUTPUT_USD_PER_MILLION': '2', 'SHERLOCK_SEARCH_USD_PER_CALL': '.005'}
+                  'SHERLOCK_OUTPUT_USD_PER_MILLION': '2.5', 'SHERLOCK_SEARCH_USD_PER_CALL': '.005'}
         store = MagicMock()
         response = {'usageMetadata': {'promptTokenCount': 10, 'candidatesTokenCount': 20, 'thoughtsTokenCount': 30},
                     'candidates': [{'finishReason': 'STOP', 'content': {'parts': [{'text': '{"safe":true}'}]}}]}
         def paid_call(request, deadline):
             store.reserve.assert_called_once()
             self.assertNotIn('tools', json.loads(request.data))
+            output_format=json.loads(request.data)['generationConfig']['responseFormat'][0]['text']
+            self.assertEqual(output_format['mimeType'],'APPLICATION_JSON')
+            self.assertIn('queries',output_format['schema']['properties'])
+            self.assertEqual(json.loads(request.data)['generationConfig']['thinkingConfig'], {'thinkingLevel':'LOW'})
             return response
         credentials = MagicMock()
         credentials.token = 'fake-token'
         with patch.dict(os.environ, config), patch('google.auth.default', return_value=(credentials, None)), patch('research.providers.read_json', side_effect=paid_call):
             provider = Providers(store, {'id': 'job'})
             self.assertEqual(provider.generate('planning', 'Return JSON.', {'question': 'Test'}), {'safe': True})
-        self.assertEqual(store.settle.call_args.args[2], Decimal('0.00011'))
+        self.assertEqual(store.settle.call_args.args[2], Decimal('0.000135'))
 
-    def test_google_search_has_fixed_reservation_and_keeps_suggestions(self):
+    def test_uncapped_google_search_fails_before_any_paid_call(self):
         config = {'SHERLOCK_PAID_CALLS_ENABLED':'true','SHERLOCK_RATES_VERIFIED':'true',
-                  'SHERLOCK_SEARCH_PROVIDER':'google','SHERLOCK_MODEL':'gemini-2.5-flash',
-                  'GOOGLE_CLOUD_PROJECT':'test-project','SHERLOCK_INPUT_USD_PER_MILLION':'.3',
-                  'SHERLOCK_OUTPUT_USD_PER_MILLION':'2.5','SHERLOCK_SEARCH_USD_PER_CALL':'.035'}
-        store, credentials = MagicMock(), MagicMock()
-        credentials.token = 'fake-token'
-        html = '<div>Exact Google search suggestions</div>'
-        response = {'usageMetadata':{'promptTokenCount':20,'candidatesTokenCount':50},
-                    'candidates':[{'content':{'parts':[{'text':'Discovery only'}]},'groundingMetadata':{
-                        'searchEntryPoint':{'renderedContent':html},
-                        'groundingChunks':[{'web':{'uri':'https://example.org/record','title':'Record'}}]}}]}
-        def call(request, deadline):
-            store.reserve.assert_called_once()
-            self.assertGreater(store.reserve.call_args.args[2],Decimal('.035'))
-            self.assertEqual(json.loads(request.data)['tools'],[{'googleSearch':{}}])
-            self.assertNotIn('responseMimeType',json.loads(request.data)['generationConfig'])
-            return response
-        with patch.dict(os.environ,config,clear=True), patch('google.auth.default',return_value=(credentials,None)), patch('research.providers.read_json',side_effect=call):
-            results = Providers(store,{'id':'job'}).search('A public records query',0)
-            self.assertEqual(results[0]['url'],'https://example.org/record')
-            self.assertEqual(store.artifact.call_args.args[2]['renderedContent'],html)
-            self.assertEqual(store.settle.call_args.args[2],Decimal('.035131'))
-            with patch.dict(os.environ,{'SHERLOCK_SEARCH_USD_PER_CALL':'.001'}):
-                with self.assertRaises(ValueError): Providers(store,{})
+                  'SHERLOCK_SEARCH_PROVIDER':'google','SHERLOCK_MODEL':'gemini-3.5-flash-lite',
+                  'GOOGLE_CLOUD_PROJECT':'test-project'}
+        store = MagicMock()
+        with patch.dict(os.environ,config,clear=True), patch('research.providers.read_json') as call:
+            with self.assertRaises(ResearchError) as error: Providers(store,{})
+            self.assertEqual(error.exception.code,'search_not_configured')
+            call.assert_not_called()
+            store.reserve.assert_not_called()
+
+    def test_flash_cannot_run_with_flash_lite_prices(self):
+        config = {'SHERLOCK_PAID_CALLS_ENABLED':'true','SHERLOCK_RATES_VERIFIED':'true',
+                  'SHERLOCK_SEARCH_PROVIDER':'wikipedia','SHERLOCK_MODEL':'gemini-3.5-flash',
+                  'GOOGLE_CLOUD_PROJECT':'test-project','SHERLOCK_INPUT_USD_PER_MILLION':'.30',
+                  'SHERLOCK_OUTPUT_USD_PER_MILLION':'2.50','SHERLOCK_SEARCH_USD_PER_CALL':'.005'}
+        with patch.dict(os.environ,config,clear=True), patch('research.providers.read_json') as call:
+            with self.assertRaises(ValueError): Providers(MagicMock(),{})
+            call.assert_not_called()
+            with patch.dict(os.environ,{'SHERLOCK_INPUT_USD_PER_MILLION':'1.50','SHERLOCK_OUTPUT_USD_PER_MILLION':'9.00'}):
+                self.assertEqual(Providers(MagicMock(),{}).model,'gemini-3.5-flash')
+
+    def test_free_reference_discovery_needs_no_key_and_has_no_paid_reservation(self):
+        config = {'SHERLOCK_PAID_CALLS_ENABLED':'true','SHERLOCK_RATES_VERIFIED':'true',
+                  'SHERLOCK_SEARCH_PROVIDER':'wikipedia','SHERLOCK_MODEL':'gemini-3.5-flash-lite',
+                  'GOOGLE_CLOUD_PROJECT':'test-project','SHERLOCK_INPUT_USD_PER_MILLION':'.30',
+                  'SHERLOCK_OUTPUT_USD_PER_MILLION':'2.50','SHERLOCK_SEARCH_USD_PER_CALL':'.005'}
+        store=MagicMock()
+        response={'query':{'pages':{'1':{'title':'Example','pageid':1,'index':1,'extlinks':[
+            {'*':'https://agency.gov/record'},{'*':'https://agency.gov/record'},
+            {'*':'http://example.org/insecure'},{'*':'https://web.archive.org/old'},
+            {'*':'https://independent.example/report'}]}}}}
+        response['query']['pages']['2'] = {'title':'Second subject','index':2,'extlinks':[{'*':'https://second.example/record'}]}
+        with patch.dict(os.environ,config,clear=True), patch('research.providers.read_json',return_value=response) as call:
+            results=Providers(store,{'id':'job'}).search('Example subject',0)
+            self.assertEqual([r['url'] for r in results],['https://agency.gov/record','https://second.example/record','https://example.org/insecure','https://independent.example/report'])
+            self.assertIn('gsrlimit=3',call.call_args.args[0].full_url)
+            self.assertIn('ellimit=500',call.call_args.args[0].full_url)
+            store.reserve.assert_not_called()
+            self.assertEqual(store.artifact.call_args.args[2]['searchFeeUsd'],'0')
+
+    def test_reference_selection_cannot_invent_source_urls(self):
+        sources, evidence, report=fixtures()
+        provider=MagicMock()
+        provider.search_provider='wikipedia'
+        provider.search.side_effect=[[{'url':source['url']}] for source in sources]
+        provider.generate.side_effect=[{'safe':True,'queries':['Subject keyword %s' % i for i in range(6)]},
+                                       {'ids':['D0','D1','D2','D3','D4','fabricated']}]
+        with self.assertRaises(ResearchError):
+            investigate(MagicMock(),{'question':'A sufficiently specific public question','scope':''},provider,fetch=MagicMock())
+
+    def test_editor_pdf_preview_is_marked_and_does_not_approve(self):
+        from research.pdf import render_report_pdf
+        from pypdf import PdfReader
+        from io import BytesIO
+        sources,evidence,report=fixtures()
+        report.update({'sources':sources,'claims':evidence['claims']})
+        request={'status':'awaiting_review','question':'A public question','report':report}
+        with self.assertRaises(ValueError):render_report_pdf(request)
+        text=' '.join(p.extract_text() for p in PdfReader(BytesIO(render_report_pdf(request,editor_preview=True))).pages)
+        self.assertIn('EDITOR REVIEW COPY - NOT APPROVED',text)
+        self.assertNotIn('Private research brief - editor approved',text)
+        self.assertEqual(request['status'],'awaiting_review')
+
+    def test_provider_failure_finalizes_with_fresh_database_without_paid_retry(self):
+        from contextlib import contextmanager
+        from research import cli
+        original, completion = MagicMock(), MagicMock()
+        job={'id':'test-request','token':'lease'}
+        original.claim.return_value=job
+        @contextmanager
+        def connection():
+            yield object()
+        with patch.object(cli,'database',side_effect=connection), patch.object(cli,'Store',side_effect=[original,completion]), patch('research.providers.Providers'), patch('research.pipeline.investigate',side_effect=TimeoutError()) as investigate_call, patch.object(sys,'argv',['research.cli','run-once']), self.assertLogs(level='ERROR'):
+            cli.main()
+        investigate_call.assert_called_once()
+        original.finish.assert_not_called()
+        completion.finish.assert_called_once_with(job,error='research_failed')
 
     def test_public_fetch_blocks_internal_and_mixed_dns(self):
         for url in ('http://example.com', 'https://user:pass@example.com', 'https://example.com:444/a', 'file:///etc/passwd'):
@@ -186,6 +254,52 @@ class QualityTests(unittest.TestCase):
         with patch('socket.getaddrinfo', return_value=[(2, 1, 6, '', ('8.8.8.8', 443)), (2, 1, 6, '', ('169.254.169.254', 443))]):
             with self.assertRaises(ValueError):
                 resolve_public('example.com')
+
+    def test_redirect_destination_checks_its_own_robots_before_fetch(self):
+        from research.fetch import fetch_source, SourceRedirect
+        calls=[]
+        def get(url,*args,**kwargs):
+            calls.append(url)
+            if url=='https://first.example/robots.txt':return url,'User-agent: *', 'text/plain'
+            if url=='https://first.example/article':raise SourceRedirect('https://second.example/private')
+            if url=='https://second.example/robots.txt':return url,'User-agent: *\nDisallow: /private', 'text/plain'
+            raise AssertionError('Disallowed destination body must never be fetched')
+        with patch('research.fetch.download',side_effect=get):
+            with self.assertRaises(ValueError):fetch_source('https://first.example/article',float('inf'))
+        self.assertEqual(calls, ['https://first.example/robots.txt','https://first.example/article','https://second.example/robots.txt'])
+
+    def test_public_redirect_is_followed_only_after_new_robots_check(self):
+        from research.fetch import fetch_source, SourceRedirect
+        calls=[]
+        def get(url,*args,**kwargs):
+            calls.append(url)
+            if url.endswith('/robots.txt'):return url,'User-agent: *', 'text/plain'
+            if url=='https://first.example/article':raise SourceRedirect('https://second.example/article')
+            return url,'<title>Primary record</title><p>'+('Verified public evidence. '*70)+'</p>','text/html'
+        with patch('research.fetch.download',side_effect=get):
+            source=fetch_source('https://first.example/article',float('inf'))
+        self.assertEqual(source['url'],'https://second.example/article')
+        self.assertLess(calls.index('https://second.example/robots.txt'),calls.index('https://second.example/article'))
+
+    def test_crawl_delay_over_deadline_blocks_document_fetch(self):
+        from research import fetch
+        def fake(url, *args, **kwargs):
+            if url.endswith('/robots.txt'):
+                return url, 'User-agent: *\nCrawl-delay: 120', 'text/plain'
+            self.fail('Document fetched before crawl delay elapsed')
+        with patch.object(fetch, 'download', side_effect=fake), patch.object(fetch.time, 'monotonic', return_value=100), patch.object(fetch.time, 'sleep') as sleep, patch.dict(fetch._LAST_DOCUMENT_FETCH, {'delay.example': 99}, clear=True):
+            with self.assertRaises(TimeoutError):
+                fetch.fetch_source('https://delay.example/article', 110)
+            sleep.assert_not_called()
+
+    def test_source_honors_wildcard_robots_and_longest_specific_rule(self):
+        from research.fetch import fetch_source
+        rules='User-agent: *\nAllow: /\nDisallow: /private/*\n'
+        def get(url,*args,**kwargs):
+            if url.endswith('/robots.txt'):return url,rules,'text/plain'
+            raise AssertionError('A wildcard-disallowed source must never be fetched')
+        with patch('research.fetch.download',side_effect=get):
+            with self.assertRaises(ValueError):fetch_source('https://example.org/private/record',float('inf'))
 
     def test_money_rounds_up_and_rejects_nonfinite(self):
         self.assertEqual(money('0.000000001'), Decimal('0.00000001'))

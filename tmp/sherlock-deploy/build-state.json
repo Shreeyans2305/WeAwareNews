@@ -1,6 +1,6 @@
 {
-  "buildId": "97ca5954-67b3-40cb-85a5-fdecc7057897",
-  "staging": "/var/folders/n8/g8x_pzm12f121mkd_9_1v6hc0000gn/T/weaware-sherlock-build-eeicgsdq",
-  "apiImage": "us-central1-docker.pkg.dev/weaware/cloud-run-source-deploy/weaware-api:sherlock-pilot-20261028-094120",
-  "workerImage": "us-central1-docker.pkg.dev/weaware/cloud-run-source-deploy/weaware-sherlock-worker:pilot-20261028-094120"
+  "buildId": "a19d41fb-19e0-4e66-9eef-7f970ff1ce13",
+  "staging": "/var/folders/n8/g8x_pzm12f121mkd_9_1v6hc0000gn/T/weaware-sherlock-patch-x5r8l0qd",
+  "apiImage": "us-central1-docker.pkg.dev/weaware/cloud-run-source-deploy/weaware-api:sherlock-pilot-20261028-155207",
+  "workerImage": "us-central1-docker.pkg.dev/weaware/cloud-run-source-deploy/weaware-sherlock-worker:pilot-20261028-155207"
 }

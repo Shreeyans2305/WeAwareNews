@@ -1,43 +1,290 @@
 // !$*UTF8*$!
-{ archiveVersion = 1; classes = {}; objectVersion = 56; objects = {
-AA0000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthTests/AuthTests.swift; sourceTree = "<group>"; };
-AA0000000000000000000002 = {isa = PBXBuildFile; fileRef = AA0000000000000000000001; };
-AA0000000000000000000003 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = WeAwareAuthTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-AA0000000000000000000004 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (AA0000000000000000000002); runOnlyForDeploymentPostprocessing = 0; };
-AA0000000000000000000005 = {isa = PBXContainerItemProxy; containerPortal = 000000000000000000000001; proxyType = 1; remoteGlobalIDString = 000000000000000000000005; remoteInfo = WeAware; };
-AA0000000000000000000006 = {isa = PBXTargetDependency; target = 000000000000000000000005; targetProxy = AA0000000000000000000005; };
-AA0000000000000000000007 = {isa = PBXNativeTarget; buildConfigurationList = AA0000000000000000000008; buildPhases = (AA0000000000000000000004); buildRules = (); dependencies = (AA0000000000000000000006); name = WeAwareAuthTests; productName = WeAwareAuthTests; productReference = AA0000000000000000000003; productType = "com.apple.product-type.bundle.unit-test"; };
-AA0000000000000000000008 = {isa = XCConfigurationList; buildConfigurations = (AA0000000000000000000009,AA000000000000000000000A); defaultConfigurationIsVisible = 0; defaultConfigurationName = Debug; };
-AA0000000000000000000009 = {isa = XCBuildConfiguration; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WeAware.app/WeAware"; PRODUCT_BUNDLE_IDENTIFIER = news.weaware.ios.authtests; PRODUCT_NAME = "$(TARGET_NAME)"; GENERATE_INFOPLIST_FILE = YES; CODE_SIGN_STYLE = Automatic; SWIFT_VERSION = 5.0; IPHONEOS_DEPLOYMENT_TARGET = 17.0; TARGETED_DEVICE_FAMILY = "1,2";}; name = Debug; };
-AA000000000000000000000A = {isa = XCBuildConfiguration; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WeAware.app/WeAware"; PRODUCT_BUNDLE_IDENTIFIER = news.weaware.ios.authtests; PRODUCT_NAME = "$(TARGET_NAME)"; GENERATE_INFOPLIST_FILE = YES; CODE_SIGN_STYLE = Automatic; SWIFT_VERSION = 5.0; IPHONEOS_DEPLOYMENT_TARGET = 17.0; TARGETED_DEVICE_FAMILY = "1,2";}; name = Release; };
-000000000000000000000064 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = API.swift; sourceTree = "<group>"; };
-0000000000000000000000C8 = {isa = PBXBuildFile; fileRef = 000000000000000000000064; };
-000000000000000000000065 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountViews.swift; sourceTree = "<group>"; };
-0000000000000000000000C9 = {isa = PBXBuildFile; fileRef = 000000000000000000000065; };
-000000000000000000000066 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth.swift; sourceTree = "<group>"; };
-0000000000000000000000CA = {isa = PBXBuildFile; fileRef = 000000000000000000000066; };
-000000000000000000000067 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
-0000000000000000000000CB = {isa = PBXBuildFile; fileRef = 000000000000000000000067; };
-000000000000000000000068 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Player.swift; sourceTree = "<group>"; };
-0000000000000000000000CC = {isa = PBXBuildFile; fileRef = 000000000000000000000068; };
-000000000000000000000069 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodcastsView.swift; sourceTree = "<group>"; };
-0000000000000000000000CD = {isa = PBXBuildFile; fileRef = 000000000000000000000069; };
-00000000000000000000006A = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SherlockView.swift; sourceTree = "<group>"; };
-0000000000000000000000CE = {isa = PBXBuildFile; fileRef = 00000000000000000000006A; };
-00000000000000000000006B = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeAwareApp.swift; sourceTree = "<group>"; };
-0000000000000000000000CF = {isa = PBXBuildFile; fileRef = 00000000000000000000006B; };
-000000000000000000000001 = {isa = PBXProject; attributes = {LastUpgradeCheck = 2710; }; buildConfigurationList = 00000000000000000000000A; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; knownRegions = (en, Base); mainGroup = 000000000000000000000002; productRefGroup = 000000000000000000000004; projectDirPath = ""; targets = (000000000000000000000005,AA0000000000000000000007); };
-000000000000000000000002 = {isa = PBXGroup; children = (000000000000000000000003, 000000000000000000000004, 000000000000000000000008, AA0000000000000000000001); sourceTree = "<group>"; };
-000000000000000000000003 = {isa = PBXGroup; path = WeAware; sourceTree = "<group>"; children = (000000000000000000000064,000000000000000000000065,000000000000000000000066,000000000000000000000067,000000000000000000000068,000000000000000000000069,00000000000000000000006A,00000000000000000000006B); };
-000000000000000000000004 = {isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (000000000000000000000006,AA0000000000000000000003); };
-000000000000000000000005 = {isa = PBXNativeTarget; buildConfigurationList = 00000000000000000000000B; buildPhases = (000000000000000000000007); buildRules = (); dependencies = (); name = WeAware; productName = WeAware; productReference = 000000000000000000000006; productType = "com.apple.product-type.application"; };
-000000000000000000000006 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = WeAware.app; sourceTree = BUILT_PRODUCTS_DIR; };
-000000000000000000000007 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (0000000000000000000000C8,0000000000000000000000C9,0000000000000000000000CA,0000000000000000000000CB,0000000000000000000000CC,0000000000000000000000CD,0000000000000000000000CE,0000000000000000000000CF); runOnlyForDeploymentPostprocessing = 0; };
-000000000000000000000008 = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
-00000000000000000000000A = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000000C,00000000000000000000000D); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-00000000000000000000000B = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000000E,00000000000000000000000F); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-00000000000000000000000C = {isa = XCBuildConfiguration; baseConfigurationReference = 000000000000000000000008; buildSettings = {SDKROOT = iphoneos; CLANG_ENABLE_MODULES = YES; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES;}; name = Debug; };
-00000000000000000000000D = {isa = XCBuildConfiguration; baseConfigurationReference = 000000000000000000000008; buildSettings = {SDKROOT = iphoneos; CLANG_ENABLE_MODULES = YES; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES;}; name = Release; };
-00000000000000000000000E = {isa = XCBuildConfiguration; baseConfigurationReference = 000000000000000000000008; buildSettings = {INFOPLIST_FILE = WeAware/Info.plist; PRODUCT_NAME = "$(TARGET_NAME)"; TARGETED_DEVICE_FAMILY = "1,2"; CODE_SIGN_STYLE = Automatic; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = NO;}; name = Debug; };
-00000000000000000000000F = {isa = XCBuildConfiguration; baseConfigurationReference = 000000000000000000000008; buildSettings = {INFOPLIST_FILE = WeAware/Info.plist; PRODUCT_NAME = "$(TARGET_NAME)"; TARGETED_DEVICE_FAMILY = "1,2"; CODE_SIGN_STYLE = Automatic; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = NO;}; name = Release; };
-}; rootObject = 000000000000000000000001; }
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0000000000000000000000C8 /* API.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000064 /* API.swift */; };
+		0000000000000000000000C9 /* AccountViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000065 /* AccountViews.swift */; };
+		0000000000000000000000CA /* Auth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000066 /* Auth.swift */; };
+		0000000000000000000000CB /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000067 /* Models.swift */; };
+		0000000000000000000000CC /* Player.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000068 /* Player.swift */; };
+		0000000000000000000000CD /* PodcastsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000069 /* PodcastsView.swift */; };
+		0000000000000000000000CE /* SherlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000006A /* SherlockView.swift */; };
+		0000000000000000000000CF /* WeAwareApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000006B /* WeAwareApp.swift */; };
+		AA0000000000000000000002 /* AuthTests/AuthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000001 /* AuthTests/AuthTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AA0000000000000000000005 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000000000005;
+			remoteInfo = WeAware;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		000000000000000000000006 /* WeAware.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = WeAware.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000008 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
+		000000000000000000000064 /* API.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = API.swift; sourceTree = "<group>"; };
+		000000000000000000000065 /* AccountViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountViews.swift; sourceTree = "<group>"; };
+		000000000000000000000066 /* Auth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth.swift; sourceTree = "<group>"; };
+		000000000000000000000067 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		000000000000000000000068 /* Player.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Player.swift; sourceTree = "<group>"; };
+		000000000000000000000069 /* PodcastsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodcastsView.swift; sourceTree = "<group>"; };
+		00000000000000000000006A /* SherlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SherlockView.swift; sourceTree = "<group>"; };
+		00000000000000000000006B /* WeAwareApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeAwareApp.swift; sourceTree = "<group>"; };
+		AA0000000000000000000001 /* AuthTests/AuthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthTests/AuthTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000003 /* WeAwareAuthTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = WeAwareAuthTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		000000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000003 /* WeAware */,
+				000000000000000000000004 /* Products */,
+				000000000000000000000008 /* Config.xcconfig */,
+				AA0000000000000000000001 /* AuthTests/AuthTests.swift */,
+			);
+			sourceTree = "<group>";
+		};
+		000000000000000000000003 /* WeAware */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000064 /* API.swift */,
+				000000000000000000000065 /* AccountViews.swift */,
+				000000000000000000000066 /* Auth.swift */,
+				000000000000000000000067 /* Models.swift */,
+				000000000000000000000068 /* Player.swift */,
+				000000000000000000000069 /* PodcastsView.swift */,
+				00000000000000000000006A /* SherlockView.swift */,
+				00000000000000000000006B /* WeAwareApp.swift */,
+			);
+			path = WeAware;
+			sourceTree = "<group>";
+		};
+		000000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000006 /* WeAware.app */,
+				AA0000000000000000000003 /* WeAwareAuthTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		000000000000000000000005 /* WeAware */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 00000000000000000000000B /* Build configuration list for PBXNativeTarget "WeAware" */;
+			buildPhases = (
+				000000000000000000000007 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WeAware;
+			productName = WeAware;
+			productReference = 000000000000000000000006 /* WeAware.app */;
+			productType = "com.apple.product-type.application";
+		};
+		AA0000000000000000000007 /* WeAwareAuthTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000008 /* Build configuration list for PBXNativeTarget "WeAwareAuthTests" */;
+			buildPhases = (
+				AA0000000000000000000004 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA0000000000000000000006 /* PBXTargetDependency */,
+			);
+			name = WeAwareAuthTests;
+			productName = WeAwareAuthTests;
+			productReference = AA0000000000000000000003 /* WeAwareAuthTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		000000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 2710;
+			};
+			buildConfigurationList = 00000000000000000000000A /* Build configuration list for PBXProject "WeAware" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 000000000000000000000002;
+			productRefGroup = 000000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				000000000000000000000005 /* WeAware */,
+				AA0000000000000000000007 /* WeAwareAuthTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		000000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0000000000000000000000C8 /* API.swift in Sources */,
+				0000000000000000000000C9 /* AccountViews.swift in Sources */,
+				0000000000000000000000CA /* Auth.swift in Sources */,
+				0000000000000000000000CB /* Models.swift in Sources */,
+				0000000000000000000000CC /* Player.swift in Sources */,
+				0000000000000000000000CD /* PodcastsView.swift in Sources */,
+				0000000000000000000000CE /* SherlockView.swift in Sources */,
+				0000000000000000000000CF /* WeAwareApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000002 /* AuthTests/AuthTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AA0000000000000000000006 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 000000000000000000000005 /* WeAware */;
+			targetProxy = AA0000000000000000000005 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		00000000000000000000000C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000008 /* Config.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				ENABLE_TESTABILITY = YES;
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		00000000000000000000000D /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000008 /* Config.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				ENABLE_TESTABILITY = YES;
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Release;
+		};
+		00000000000000000000000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000008 /* Config.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 55NHMS37BA;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WeAware/Info.plist;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		00000000000000000000000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000008 /* Config.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 55NHMS37BA;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WeAware/Info.plist;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		AA0000000000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = news.weaware.ios.authtests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WeAware.app/WeAware";
+			};
+			name = Debug;
+		};
+		AA000000000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = news.weaware.ios.authtests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WeAware.app/WeAware";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		00000000000000000000000A /* Build configuration list for PBXProject "WeAware" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00000000000000000000000C /* Debug */,
+				00000000000000000000000D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		00000000000000000000000B /* Build configuration list for PBXNativeTarget "WeAware" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00000000000000000000000E /* Debug */,
+				00000000000000000000000F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000008 /* Build configuration list for PBXNativeTarget "WeAwareAuthTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000009 /* Debug */,
+				AA000000000000000000000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 000000000000000000000001 /* Project object */;
+}

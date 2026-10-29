@@ -598,6 +598,8 @@ img.newspaper-img:hover,
   backdrop-filter: blur(12px);
 }
 .perspective-source-preview::after {
+  display: none;
+  /* The preview follows the pointer, so a fixed center notch would point away from it. */
   position: absolute;
   bottom: -0.42rem;
   left: 50%;
@@ -609,6 +611,14 @@ img.newspaper-img:hover,
   content: '';
   transform: translateX(-50%) rotate(45deg);
 }
+.perspective-source-preview.is-following-cursor {
+  top: var(--preview-y);
+  right: auto;
+  bottom: auto;
+  left: var(--preview-x);
+  transform: none;
+  animation-name: source-preview-follow-in;
+}
 .perspective-source-preview > img { width: 6.2rem; height: 100%; min-height: 6.5rem; max-height: 9rem; border-radius: 0.3rem; object-fit: cover; }
 .perspective-source-preview-copy { min-width: 0; }
 .perspective-source-preview-outlet { display: flex; align-items: center; gap: 0.4rem; margin: 0; color: var(--muted); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -616,6 +626,7 @@ img.newspaper-img:hover,
 .perspective-source-preview-copy > strong { display: block; margin-top: 0.35rem; font-family: 'Newsreader', Georgia, serif; font-size: 0.95rem; font-weight: 750; line-height: 1.12; }
 .perspective-source-preview-copy > p:last-child { margin: 0.35rem 0 0; color: var(--muted); font-size: 0.68rem; line-height: 1.35; }
 @keyframes source-preview-in { from { opacity: 0; transform: translate(-50%, 7px) scale(0.98); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+@keyframes source-preview-follow-in { from { opacity: 0; transform: translateY(5px) scale(0.98); } to { opacity: 1; transform: none; } }
 .perspective-slider-wrap {
   position: absolute;
   z-index: 3;
@@ -668,6 +679,7 @@ img.newspaper-img:hover,
   .perspective-layout { grid-template-columns: 1fr; gap: 1.25rem; }
   .perspective-visual { grid-column: 1; grid-row: 1; height: clamp(190px, 38vh, 340px); }
   .perspective-source-preview { left: 50%; grid-template-columns: 4.5rem minmax(0, 1fr); gap: 0.6rem; }
+  .perspective-source-preview.is-following-cursor { left: var(--preview-x); }
   .perspective-source-preview > img { width: 4.5rem; min-height: 5.4rem; }
   .perspective-copy-first { grid-column: 1; grid-row: 2; }
   .perspective-copy-second { grid-column: 1; grid-row: 3; }

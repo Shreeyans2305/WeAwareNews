@@ -191,7 +191,7 @@ export default function SherlockPage() {
   return <div className="jeff-page">
     <header className="jeff-hero">
       <div className="jeff-eyebrow"><span className="jeff-dot" /> WeAware research desk · Private pilot</div>
-      <div className="jeff-hero-row"><div><h1>Sherlock Mode<span>A question worth<br />looking into.</span></h1><p>Meet Journalist Jeff, your AI research assistant. Ask about an event, a claim, or a topic. Get a considered brief with the evidence open for inspection.</p></div><div className="jeff-emblem" aria-hidden="true"><Search strokeWidth={1} /><span>JJ / RESEARCH</span></div></div>
+      <div className="jeff-hero-row"><div><h1>Sherlock Mode<span>A question worth<br />looking into.</span></h1><p>Meet Journalist Jeff, your AI research assistant. Ask about an event, a claim, or a topic. Get a considered brief with the evidence open for inspection. This pilot starts with Wikipedia’s reference lists and checks the original sources; breaking news and obscure topics may have limited coverage.</p></div><div className="jeff-emblem" aria-hidden="true"><Search strokeWidth={1} /><span>JJ / RESEARCH</span></div></div>
       <div className="jeff-principles"><span><BookOpen size={16} /> Sources you can inspect</span><span><ShieldCheck size={16} /> Checked before delivery</span><span><Clock3 size={16} /> Aiming for 24 hours</span></div>
     </header>
     {error && <div role="alert" className="jeff-alert">{error}</div>}

@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import urllib.error
 from contextlib import contextmanager
 from pathlib import Path
 from .store import Store, ResearchError, transaction, decoded
@@ -61,6 +62,9 @@ def main():
     decision.add_argument('--decision', choices=['approve', 'reject'], required=True)
     decision.add_argument('--actor', required=True)
     decision.add_argument('--note', required=True, help='Document source checks and decision')
+    preview = commands.add_parser('preview-pdf', help='Private, clearly marked unapproved editor copy; never publishes a report')
+    preview.add_argument('id')
+    preview.add_argument('--output', required=True)
     commands.add_parser('purge-evidence', help='Delete raw artifacts older than 30 days; preserve usage records')
     args = parser.parse_args()
     with database() as db:
@@ -118,13 +122,25 @@ def main():
             try:
                 from .pipeline import investigate
                 report, review = investigate(store, job, Providers(store, job))
-                store.finish(job, report, review)
+                # Finalize through a fresh connection after long provider calls.
+                # This retries no paid operation and still requires the lease.
+                with database() as completion_db:
+                    Store(completion_db).finish(job, report, review)
                 print('Investigation ready for private editor review: ' + job['id'])
             except Exception as exc:
-                code = exc.code if isinstance(exc, ResearchError) else 'research_failed'
+                # Provider diagnostics stay in the private expiring artifact store;
+                # logs retain only the status code and exception class.
+                if isinstance(exc, urllib.error.HTTPError):
+                    try:
+                        with database() as diagnostic_db:
+                            Store(diagnostic_db).artifact(job, 'provider-error', {'httpStatus': exc.code, 'response': exc.read(4000).decode('utf-8', errors='replace')})
+                    except Exception:
+                        logging.warning('Private provider diagnostic unavailable for %s', job['id'])
+                code = exc.code if isinstance(exc, ResearchError) else ('provider_http_%s' % exc.code if isinstance(exc, urllib.error.HTTPError) else 'research_failed')
                 # Never log questions, source bodies, provider payloads or secrets.
                 logging.error('Sherlock request %s failed (%s, %s)', job['id'], code, type(exc).__name__)
-                store.finish(job, error=code)
+                with database() as completion_db:
+                    Store(completion_db).finish(job, error=code)
         elif args.command == 'review-list':
             with transaction(db) as cur:
                 cur.execute("SELECT id,question,created_at,committed,report_length FROM sherlock_requests WHERE status='awaiting_review' ORDER BY created_at")
@@ -135,6 +151,24 @@ def main():
                 print(json.dumps(cur.fetchone(), default=str, indent=2))
                 cur.execute('SELECT name,data FROM sherlock_artifacts WHERE request_id=%s ORDER BY created_at', (args.id,))
                 print(json.dumps(cur.fetchall(), default=str, indent=2))
+        elif args.command == 'preview-pdf':
+            with transaction(db) as cur:
+                cur.execute('SELECT uid FROM sherlock_requests WHERE id=%s', (args.id,))
+                row = cur.fetchone()
+            if not row:
+                parser.error('Investigation not found.')
+            investigation = store.detail(row[0], args.id)
+            # Reader APIs hide drafts; privileged CLI reads the pending draft.
+            with transaction(db) as cur:
+                cur.execute('SELECT report FROM sherlock_requests WHERE id=%s', (args.id,))
+                investigation['report'] = decoded(cur.fetchone()[0])
+            from .pdf import render_report_pdf
+            content = render_report_pdf(investigation, editor_preview=True)
+            output = Path(args.output)
+            if output.exists():
+                parser.error('Choose a new output path; previews never overwrite an existing file.')
+            output.write_bytes(content)
+            print('Private, unapproved editor PDF created: ' + str(output.resolve()))
         elif args.command == 'review':
             if len(args.note.strip()) < 20:
                 parser.error('Record a meaningful review note of at least 20 characters.')

@@ -11,10 +11,11 @@ import ssl
 import time
 from html.parser import HTMLParser
 from urllib.parse import urlsplit, urlunsplit, urljoin
-from urllib.robotparser import RobotFileParser
+from protego import Protego
 
 AGENT = 'WeAwareResearchBot'
 MAX_BYTES = 1_000_000
+_LAST_DOCUMENT_FETCH = {}
 
 
 def public_url(url):
@@ -45,8 +46,14 @@ class PinnedHTTPS(http.client.HTTPSConnection):
             raise
 
 
-def download(url, deadline, limit=MAX_BYTES, origin=None):
-    for _ in range(4):
+class SourceRedirect(ValueError):
+    def __init__(self, url):
+        self.url = public_url(url)
+        super().__init__('Source redirects to another URL requiring a fresh robots check')
+
+
+def download(url, deadline, limit=MAX_BYTES, origin=None, follow_redirects=True):
+    for _ in range(5):
         url = public_url(url)
         parts = urlsplit(url)
         if origin and parts.netloc != origin:
@@ -59,7 +66,10 @@ def download(url, deadline, limit=MAX_BYTES, origin=None):
                                headers={'User-Agent': AGENT + '/1.0', 'Accept': 'text/html,text/plain', 'Accept-Encoding': 'identity'})
             response = connection.getresponse()
             if response.status in (301, 302, 303, 307, 308):
-                url = urljoin(url, response.getheader('Location') or '')
+                target = public_url(urljoin(url, response.getheader('Location') or ''))
+                if not follow_redirects:
+                    raise SourceRedirect(target)
+                url = target
                 continue
             if response.status != 200:
                 raise ValueError('Source unavailable (HTTP %s)' % response.status)
@@ -143,23 +153,38 @@ def resolve_discovery_url(url, deadline):
 
 def fetch_source(url, deadline):
     url = resolve_discovery_url(url,deadline)
-    parts = urlsplit(url)
-    robots_url = urlunsplit(('https', parts.netloc, '/robots.txt', '', ''))
-    # Fail closed on robots errors other than a missing robots file.
-    try:
-        _, robots_text, _ = download(robots_url, deadline, limit=100_000, origin=parts.netloc)
-    except ValueError as exc:
-        if 'HTTP 404' not in str(exc):
-            raise
-        robots_text = ''
-    robots = RobotFileParser()
-    robots.parse(robots_text.splitlines())
-    if not robots.can_fetch(AGENT, url):
-        raise ValueError('Source disallows research crawling')
-    final_url, text, content_type = download(url, deadline, origin=parts.netloc)
-    # Redirects across origins need their own robots policy; skip in the pilot.
-    if urlsplit(final_url).netloc != parts.netloc:
-        raise ValueError('Cross-origin redirect requires separate source discovery')
+    for hop in range(5):
+        parts = urlsplit(public_url(url))
+        robots_url = urlunsplit(('https', parts.netloc, '/robots.txt', '', ''))
+        # Fail closed on robots errors other than a missing robots file.
+        try:
+            _, robots_text, _ = download(robots_url, deadline, limit=100_000)
+        except ValueError as exc:
+            if 'HTTP 404' not in str(exc):
+                raise
+            robots_text = ''
+        robots = Protego.parse(robots_text)
+        if not robots.can_fetch(url, AGENT):
+            raise ValueError('Source disallows research crawling')
+        delay = max(0, robots.crawl_delay(AGENT) or 0)
+        rate = robots.request_rate(AGENT)
+        if rate and rate.requests > 0:
+            delay = max(delay, rate.seconds / rate.requests)
+        wait = delay - (time.monotonic() - _LAST_DOCUMENT_FETCH.get(parts.netloc, float('-inf')))
+        if wait > 0:
+            if time.monotonic() + wait >= deadline:
+                raise TimeoutError('Publisher crawl delay exceeds retrieval deadline')
+            time.sleep(wait)
+        _LAST_DOCUMENT_FETCH[parts.netloc] = time.monotonic()
+        try:
+            final_url, text, content_type = download(url, deadline, origin=parts.netloc, follow_redirects=False)
+            break
+        except SourceRedirect as redirect:
+            # Every path and destination repeats robots validation. download
+            # also pins public DNS and validates TLS at every connection.
+            url = redirect.url
+    else:
+        raise ValueError('Source redirect limit reached')
     parsed = Extractor()
     if 'html' in content_type:
         parsed.feed(text)
