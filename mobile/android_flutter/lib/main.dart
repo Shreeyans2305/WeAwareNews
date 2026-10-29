@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'api.dart';
 import 'discover.dart';
+import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,31 +48,9 @@ class WeAwareApp extends StatelessWidget {
     builder: (context, mode, _) => MaterialApp(
       title: 'WeAware',
       themeMode: mode,
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xff75cbb9),
-          brightness: Brightness.dark,
-        ),
-      ),
+      darkTheme: readingTheme(Brightness.dark),
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xff075c50),
-          surface: const Color(0xfffaf8f2),
-        ),
-        scaffoldBackgroundColor: const Color(0xfffaf8f2),
-        appBarTheme: const AppBarTheme(backgroundColor: Color(0xfffaf8f2)),
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
-        ),
-        cardTheme: const CardThemeData(
-          elevation: 0,
-          margin: EdgeInsets.symmetric(vertical: 8),
-        ),
-      ),
+      theme: readingTheme(Brightness.light),
       home: Home(api: api),
     ),
   );
@@ -152,13 +131,14 @@ class _HomeState extends State<Home> {
     final api = widget.api;
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'WeAware',
-          style: TextStyle(
-            fontFamily: 'serif',
-            fontWeight: FontWeight.w900,
-            fontSize: 29,
-          ),
+        title: Text(
+          [
+            'Today’s edition',
+            'Discover',
+            'Listen',
+            'Crosscheck',
+            'Sherlock',
+          ][tab],
         ),
         actions: [
           PopupMenuButton<ThemeMode>(
@@ -322,25 +302,35 @@ class _FeedState extends State<Feed> {
       padding: const EdgeInsets.all(20),
       children: [
         const Text(
-          'INDEPENDENT SOURCES. A CLEARER PICTURE.',
+          'THE INDEPENDENT READING ROOM',
           style: TextStyle(fontSize: 10, letterSpacing: 1.7),
         ),
-        heading('The world,\ncross-checked.'),
-        copy(
-          'Read the story. See where sources agree, and where the questions remain.',
+        heading('WeAware'),
+        Text(
+          'Many sources. A clearer picture.',
+          style: TextStyle(
+            fontFamily: 'serif',
+            fontSize: 17,
+            height: 1.5,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
+        Divider(color: Theme.of(context).colorScheme.onSurface, thickness: 2),
+        const SizedBox(height: 8),
         TextField(
           controller: search,
           maxLength: 200,
           decoration: InputDecoration(
-            labelText: 'Search stories',
+            hintText: 'Search reporting',
+            prefixIcon: const Icon(Icons.search),
             counterText: '',
             suffixIcon: IconButton(
+              tooltip: 'Search',
               onPressed: () {
                 query = search.text.trim();
                 load();
               },
-              icon: const Icon(Icons.search),
+              icon: const Icon(Icons.arrow_forward),
             ),
           ),
           textInputAction: TextInputAction.search,
@@ -386,6 +376,8 @@ class _FeedState extends State<Feed> {
               final a = entry.value;
               final locked = widget.api.user == null && entry.key >= 3;
               return Card(
+                shape: const RoundedRectangleBorder(),
+                margin: const EdgeInsets.only(top: 22),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
                   onTap: () => Navigator.push(
@@ -397,7 +389,7 @@ class _FeedState extends State<Feed> {
                     ),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.only(bottom: 22),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -406,7 +398,7 @@ class _FeedState extends State<Feed> {
                             borderRadius: BorderRadius.circular(8),
                             child: Image.network(
                               a['image'],
-                              height: 160,
+                              height: 190,
                               width: double.infinity,
                               fit: BoxFit.cover,
                               errorBuilder: (_, _, _) =>
@@ -415,9 +407,13 @@ class _FeedState extends State<Feed> {
                           ),
                         const SizedBox(height: 12),
                         Text(
-                          '${a['topic']} · ${a['readMins']} min read',
+                          "${a['topic']} · ${a['readMins']} min read"
+                              .toUpperCase(),
                           style: TextStyle(
-                            color: Theme.of(context).colorScheme.primary,
+                            color: Theme.of(context).colorScheme.onSurface,
+                            fontSize: 11,
+                            letterSpacing: 1,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         Text(
@@ -425,7 +421,8 @@ class _FeedState extends State<Feed> {
                           style: const TextStyle(
                             fontFamily: 'serif',
                             fontSize: 23,
-                            fontWeight: FontWeight.bold,
+                            height: 1.2,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -433,13 +430,29 @@ class _FeedState extends State<Feed> {
                           locked
                               ? 'Sign in to unlock the full news feed.'
                               : a['summary'] ?? '',
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            height: 1.5,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         Text(
                           locked
                               ? '🔒 Sign in to read'
-                              : '${a['consensus']}% source agreement · ${objects(a['sources']).length} sources',
+                              : '${objects(a['sources']).length} sources · ${a['consensus']}% agreement',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
                         ),
+                        const Divider(height: 1),
                       ],
                     ),
                   ),
