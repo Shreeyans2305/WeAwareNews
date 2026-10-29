@@ -8,7 +8,6 @@ import Reveal from './Reveal.jsx'
 import NewsletterPersonalizer from './NewsletterPersonalizer.jsx'
 import NewsletterMasthead from './NewsletterMasthead.jsx'
 import FrontPageGrid from './FrontPageGrid.jsx'
-import LockedStoryGrid from './LockedStoryGrid.jsx'
 
 function SectionHeader({ index, title, blurb }) {
   return (
@@ -175,9 +174,8 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
   }
 
   const ticker = stories.slice(0, 3).map((s) => ({ id: s.id, title: s.title, consensus: s.consensus }))
-  const editionStories = user ? stories : stories.slice(0, 3)
-  const lockedStories = user ? [] : stories.slice(3, 9)
-  const archive = user ? stories.slice(6, 10) : []
+  const editionStories = stories
+  const archive = stories.slice(6, 10)
 
   return (
     <div className="page-enter">
@@ -198,15 +196,6 @@ export default function NewslettersPage({ onOpenStory, stories = [], topics = []
           </div>
         )}
       </section>
-      <LockedStoryGrid
-        stories={lockedStories}
-        onUnlock={requestSignIn}
-        eyebrow="Beyond the fold"
-        heading="The next pages"
-        description="Sign in to open the full cross-checks"
-        className="t-border mt-8 border-y px-6 py-7 md:px-12"
-      />
-
       {/* Section B: editions */}
       <section aria-label="Choose your section" className="px-6 py-10 md:px-12">
         <div className="mx-auto max-w-6xl">

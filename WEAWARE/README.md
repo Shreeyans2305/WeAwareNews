@@ -21,6 +21,8 @@ Build and preview the production bundle with `npm run build` and `npm run previe
 - **Podcasts:** Play published episodes, copy the RSS feed URL, and access the article listening queue. Authorized editors can review podcast drafts from the editorial interface.
 - **About:** Explains WeAware's multi-source reading approach, limitations of agreement signals, and ways to read, follow, and listen.
 
+Shared articles use `https://weaware-3504c.web.app/s/{articleId}`. Firebase Hosting serves the SPA for these paths, and the SPA loads the requested article from the public API. The `functions/shareStory` renderer adds article-specific social metadata, but Firebase requires the Blaze billing plan to deploy it. After enabling billing, route `/s/**` to `shareStory` in `firebase.json` and deploy Hosting and `functions:shareStory` together. The Apple and Android association files are served from `public/.well-known/`.
+
 The full published story feed, article reading, article audio, and podcast episodes are available without signing in. Sherlock Mode is experimental and requires a verified signed-in account with pilot access. Newsletter subscriptions and editor-only podcast review continue to use account access where needed.
 
 ## Frontend configuration

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeftRight, ArrowUpRight, Moon, Sun } from 'lucide-react'
 import { fetchArticle, fetchArticles, fetchTopics, prioritizeStoriesWithImages, toStory } from './lib/api.js'
+import { storyIdFromPath, storySharePath } from './lib/share.js'
 import { ThemeProvider, useTheme } from './theme.js'
 import Topbar from './components/Topbar.jsx'
 import SiteFooter from './components/SiteFooter.jsx'
@@ -293,10 +294,11 @@ function PerspectiveSection() {
 function Shell() {
   const { theme } = useTheme()
   const { user } = useAuth()
-  const [view, setView] = useState('hero')
+  const initialStoryId = storyIdFromPath(window.location.pathname)
+  const [view, setView] = useState(initialStoryId ? 'feed' : 'hero')
   const [topic, setTopic] = useState('All')
   const [query, setQuery] = useState('')
-  const [activeId, setActiveId] = useState(null)
+  const [activeId, setActiveId] = useState(initialStoryId)
   const [listenId, setListenId] = useState(null)
   const [listeningPlaying, setListeningPlaying] = useState(false)
   const [shareId, setShareId] = useState(null)
@@ -307,7 +309,19 @@ function Shell() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [apiError, setApiError] = useState('')
   const [detail, setDetail] = useState(null)
+  const [articleError, setArticleError] = useState('')
   const filtered = stories
+
+  useEffect(() => {
+    const onPopState = () => {
+      const id = storyIdFromPath(window.location.pathname)
+      setActiveId(id)
+      setView(id ? 'feed' : window.history.state?.view || 'hero')
+      window.scrollTo(0, 0)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -339,18 +353,34 @@ function Shell() {
   useEffect(() => {
     if (!activeId) {
       setDetail(null)
+      setArticleError('')
       return
     }
     const controller = new AbortController()
+    setDetail(null)
+    setArticleError('')
     fetchArticle(activeId, controller.signal)
       .then((article) => setDetail(toStory(article)))
       .catch((error) => {
-        if (error.name !== 'AbortError') setDetail(stories.find((story) => story.id === activeId) || null)
+        if (error.name !== 'AbortError') {
+          const cached = stories.find((story) => story.id === activeId)
+          if (cached) setDetail(cached)
+          else setArticleError('This story is unavailable. It may have been unpublished or the link may be incorrect.')
+        }
       })
     return () => controller.abort()
   }, [activeId])
 
+  const hasMoreStories = filtered.length < total
+  const activeStory = detail || stories.find((story) => story.id === activeId) || null
+
+  useEffect(() => {
+    document.title = activeStory ? `${activeStory.title} — WeAware` : 'WeAware — Unbiased News, By Design'
+  }, [activeStory])
+
   const navigate = (next) => {
+    if (storyIdFromPath(window.location.pathname)) window.history.pushState({ view: next }, '', '/')
+    else window.history.replaceState({ view: next }, '', '/')
     if (next === 'hero') {
       setActiveId(null)
       setView('hero')
@@ -369,15 +399,13 @@ function Shell() {
     )
   }
 
-  const hasMoreStories = filtered.length < total
-  const activeStory = detail || stories.find((story) => story.id === activeId) || null
-
   const resultLabel =
     `${total} ${total === 1 ? 'story' : 'stories'}` +
     (topic !== 'All' ? ` in ${topic}` : '') +
     (query.trim() !== '' ? ` matching “${query.trim()}”` : '')
 
   const openStory = (id) => {
+    window.history.pushState({ view: 'feed' }, '', storySharePath(id))
     setActiveId(id)
     setView('feed')
     window.scrollTo(0, 0)
@@ -440,6 +468,7 @@ function Shell() {
             key={activeStory.id}
             story={activeStory}
             onBack={() => {
+              window.history.pushState({ view: 'feed' }, '', '/')
               setActiveId(null)
               window.scrollTo(0, 0)
             }}
@@ -448,7 +477,13 @@ function Shell() {
             listeningPlaying={listeningPlaying}
           />
         ) : null}
-        {view === 'feed' && !activeStory ? (
+        {view === 'feed' && activeId && articleError ? (
+          <section className="mx-auto max-w-4xl px-6 py-20 text-center"><h1 className="font-display text-3xl font-bold">Story unavailable</h1><p role="alert" className="t-muted mt-3">{articleError}</p><button type="button" onClick={() => navigate('feed')} className="t-btn-outline mt-6 rounded-full px-5 py-2.5">Browse the feed</button></section>
+        ) : null}
+        {view === 'feed' && activeId && !activeStory && !articleError ? (
+          <section className="mx-auto max-w-4xl px-6 py-20 text-center t-muted" role="status">Loading this story…</section>
+        ) : null}
+        {view === 'feed' && !activeId && !activeStory ? (
           apiError ? <section className="mx-auto max-w-4xl px-6 py-20 text-center"><h1 className="font-display text-3xl font-bold">News feed unavailable</h1><p role="alert" className="t-muted mt-3">{apiError}</p></section>
             : loading && !stories.length ? <section className="mx-auto max-w-4xl px-6 py-20 text-center t-muted">Loading the latest cross-checked articles…</section>
               : <>

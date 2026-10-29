@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { CheckCircle2, Copy, Link2, Mail, MessageCircle, Send, Share2, X } from 'lucide-react'
 import { useDialogFocus } from '../lib/useDialogFocus.js'
+import { storyShareUrl } from '../lib/share.js'
 
 export default function ShareSheet({ story, open, onClose }) {
   const [copied, setCopied] = useState(false)
@@ -12,7 +13,7 @@ export default function ShareSheet({ story, open, onClose }) {
 
   if (!open || !story) return null
 
-  const url = `https://weaware.news/s/${story.id}`
+  const url = storyShareUrl(story.id)
   const text = `${story.title} — ${story.consensus}% consensus, sources shown`
 
   const copyLink = async () => {

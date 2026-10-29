@@ -38,10 +38,52 @@ Future<void> main() async {
 }
 
 final appearance = ValueNotifier<ThemeMode>(ThemeMode.system);
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+const _shareLinkMethods = MethodChannel('weaware/shared_links/methods');
+const _shareLinkEvents = EventChannel('weaware/shared_links/events');
+const _siteOrigin = 'https://weaware-3504c.web.app';
 
-class WeAwareApp extends StatelessWidget {
+class WeAwareApp extends StatefulWidget {
   const WeAwareApp({super.key, required this.api});
   final Api api;
+
+  @override
+  State<WeAwareApp> createState() => _WeAwareAppState();
+}
+
+class _WeAwareAppState extends State<WeAwareApp> {
+  StreamSubscription<dynamic>? _sharedLinks;
+  final Set<String> _openedSharedStories = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _sharedLinks = _shareLinkEvents.receiveBroadcastStream().listen(_openSharedStory);
+    _shareLinkMethods.invokeMethod<String>('initialUri').then((uri) {
+      if (uri != null) WidgetsBinding.instance.addPostFrameCallback((_) => _openSharedStory(uri));
+    }).catchError((_) {});
+  }
+
+  @override
+  void dispose() {
+    _sharedLinks?.cancel();
+    super.dispose();
+  }
+
+  void _openSharedStory(dynamic value) {
+    final uri = Uri.tryParse(value?.toString() ?? '');
+    if (uri == null || uri.scheme != 'https' || uri.host != 'weaware-3504c.web.app' || uri.pathSegments.length != 2 || uri.pathSegments.first != 's') return;
+    final id = uri.pathSegments[1];
+    if (id.isEmpty || !_openedSharedStories.add(id)) return;
+    final navigator = appNavigatorKey.currentState;
+    if (navigator == null) {
+      _openedSharedStories.remove(id);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openSharedStory(value));
+      return;
+    }
+    navigator.push(MaterialPageRoute<void>(builder: (_) => SharedArticleRoute(api: widget.api, articleId: id))).whenComplete(() => _openedSharedStories.remove(id));
+  }
+
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<ThemeMode>(
     valueListenable: appearance,
@@ -51,8 +93,49 @@ class WeAwareApp extends StatelessWidget {
       darkTheme: readingTheme(Brightness.dark),
       debugShowCheckedModeBanner: false,
       theme: readingTheme(Brightness.light),
-      home: Home(api: api),
+      navigatorKey: appNavigatorKey,
+      home: Home(api: widget.api),
     ),
+  );
+}
+
+class SharedArticleRoute extends StatefulWidget {
+  const SharedArticleRoute({super.key, required this.api, required this.articleId});
+  final Api api;
+  final String articleId;
+
+  @override
+  State<SharedArticleRoute> createState() => _SharedArticleRouteState();
+}
+
+class _SharedArticleRouteState extends State<SharedArticleRoute> {
+  Json? article;
+  String error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => error = '');
+    try {
+      final result = await widget.api.call('/articles/${Uri.encodeComponent(widget.articleId)}');
+      if (mounted) setState(() => article = result);
+    } catch (_) {
+      if (mounted) setState(() => error = 'This story is unavailable. Check the link or try again.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Shared story')),
+    body: article != null
+      ? Reader(api: widget.api, article: article!, fetchFullArticle: false)
+      : error.isNotEmpty
+        ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Text(error), const SizedBox(height: 16), FilledButton(onPressed: _load, child: const Text('Try again'))])))
+        : const Center(child: CircularProgressIndicator()),
   );
 }
 
@@ -482,9 +565,10 @@ class _FeedState extends State<Feed> {
 }
 
 class Reader extends StatefulWidget {
-  const Reader({super.key, required this.api, required this.article});
+  const Reader({super.key, required this.api, required this.article, this.fetchFullArticle = true});
   final Api api;
   final Json article;
+  final bool fetchFullArticle;
   @override
   State<Reader> createState() => _ReaderState();
 }
@@ -494,6 +578,7 @@ class _ReaderState extends State<Reader> {
   @override
   void initState() {
     super.initState();
+    if (!widget.fetchFullArticle) return;
     widget.api
         .call('/articles/${Uri.encodeComponent(article['id'])}')
         .then((v) {
@@ -514,7 +599,7 @@ class _ReaderState extends State<Reader> {
           onPressed: () => SharePlus.instance.share(
             ShareParams(
               text:
-                  '${article['title']}\nhttps://weaware.news/s/${Uri.encodeComponent(article['id'])}',
+                  '${article['title']}\n$_siteOrigin/s/${Uri.encodeComponent(article['id'])}',
             ),
           ),
           icon: const Icon(Icons.ios_share),
@@ -1087,7 +1172,7 @@ class _AccountState extends State<Account> {
             'Multi-source news, original reporting and room for uncertainty. WeAware uses AI to help cluster coverage, draft summaries and synthesize narration. Editorial review does not replace your judgment; follow the sources for important claims.',
           ),
           TextButton(
-            onPressed: () => openLink('https://weaware.news'),
+            onPressed: () => openLink(_siteOrigin),
             child: const Text('Visit WeAware'),
           ),
         ],

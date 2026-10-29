@@ -31,7 +31,7 @@ struct AccountView: View {
         Section("About WeAware") {
             Text("WeAware brings multiple reports together, keeping sources, differences and uncertainty in view so you can make up your own mind.")
             Text("AI helps cluster coverage, draft summaries and synthesize audio. Published articles and podcasts pass editorial review. Automated signals and summaries can contain errors; inspect the original reporting for important claims.").font(.footnote).foregroundStyle(.secondary)
-            Link("Visit WeAware", destination: URL(string: "https://weaware.news")!)
+            Link("Visit WeAware", destination: URL(string: AppConfig.siteOrigin)!)
         }
     }.navigationTitle("Account").buttonStyle(.borderless)
         .onChange(of: account.signedIn) { _, signedIn in if signedIn { register = false; password = ""; message = "" } }

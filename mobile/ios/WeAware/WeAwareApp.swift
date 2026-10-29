@@ -1,9 +1,56 @@
 import SwiftUI
 
+private struct SharedStoryLink: Identifiable {
+    let id: String
+}
+
 @main struct WeAwareApp: App {
     @StateObject private var account = Account(); @StateObject private var audio = AudioPlayer()
     @AppStorage("appearance") private var appearance = "system"
-    var body: some Scene { WindowGroup { RootView().environmentObject(account).environmentObject(audio).tint(.primary).preferredColorScheme(appearance == "system" ? nil : appearance == "dark" ? .dark : .light) } }
+    @State private var sharedStory: SharedStoryLink?
+    var body: some Scene { WindowGroup { RootView().environmentObject(account).environmentObject(audio).tint(.primary).preferredColorScheme(appearance == "system" ? nil : appearance == "dark" ? .dark : .light)
+        .onOpenURL(perform: receiveSharedURL)
+        .sheet(item: $sharedStory) { link in NavigationStack { SharedArticleView(id: link.id) } }
+    } }
+
+    private func receiveSharedURL(_ url: URL) {
+        guard url.scheme == "https", url.host == "weaware-3504c.web.app" else { return }
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.count == 2, parts[0] == "s", !parts[1].isEmpty else { return }
+        sharedStory = SharedStoryLink(id: parts[1])
+    }
+}
+
+private struct SharedArticleView: View {
+    let id: String
+    @State private var article: Article?
+    @State private var error = ""
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Group {
+            if let article {
+                ReaderView(article: article, fetchFullArticle: false)
+            } else if error.isEmpty {
+                ProgressView("Opening story…").task { await load() }
+            } else {
+                VStack(spacing: 16) {
+                    Notice(text: error)
+                    Button("Try again") { Task { await load() } }
+                }.padding()
+            }
+        }
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+    }
+
+    private func load() async {
+        error = ""
+        do {
+            article = try await API.get("/api/v1/articles/\(API.id(id))")
+        } catch {
+            self.error = "This story is unavailable. Check the link or try again."
+        }
+    }
 }
 struct RootView: View {
     var body: some View { TabView {
@@ -63,12 +110,13 @@ struct StoryCard: View {
 }
 struct ReaderView: View {
     @State var article: Article; @EnvironmentObject var audio: AudioPlayer
+    var fetchFullArticle = true
     @State private var error = ""
     @AppStorage("likedArticles") private var likedArticles = ""
     var liked: Bool { likedArticles.components(separatedBy: "|").contains(article.id) }
     var body: some View { ScrollView { VStack(alignment: .leading, spacing: 22) {
         StoryCard(article: article)
-        HStack { Button { audio.narrate(article) } label: { Label("Listen", systemImage: "play.circle.fill") }; Spacer(); Button { var values = Set(likedArticles.components(separatedBy: "|").filter { !$0.isEmpty }); if liked { values.remove(article.id) } else { values.insert(article.id) }; likedArticles = values.sorted().joined(separator: "|") } label: { Image(systemName: liked ? "heart.fill" : "heart").accessibilityLabel(liked ? "Unlike story" : "Like story") }; ShareLink(item: URL(string: "https://weaware.news/s/\(API.id(article.id))")!) { Label("Share", systemImage: "square.and.arrow.up") } }
+        HStack { Button { audio.narrate(article) } label: { Label("Listen", systemImage: "play.circle.fill") }; Spacer(); Button { var values = Set(likedArticles.components(separatedBy: "|").filter { !$0.isEmpty }); if liked { values.remove(article.id) } else { values.insert(article.id) }; likedArticles = values.sorted().joined(separator: "|") } label: { Image(systemName: liked ? "heart.fill" : "heart").accessibilityLabel(liked ? "Unlike story" : "Like story") }; ShareLink(item: URL(string: "\(AppConfig.siteOrigin)/s/\(API.id(article.id))")!) { Label("Share", systemImage: "square.and.arrow.up") } }
         Text("AI-assisted reporting and narration. Open the linked sources to inspect important claims.").font(.caption).foregroundStyle(.secondary)
         ForEach(Array(article.body.enumerated()), id: \.offset) { _, paragraph in Text(paragraph).font(.system(.body, design: .serif)).lineSpacing(6).textSelection(.enabled) }
         Divider(); Text("The source notebook").font(.system(.title2, design: .serif, weight: .bold))
@@ -83,7 +131,7 @@ struct ReaderView: View {
         if article.flaggedClaims.isEmpty { Notice(text: "No low-confidence claims were flagged. Automated checks can miss errors.") }
         ForEach(Array(article.flaggedClaims.enumerated()), id: \.offset) { _, flag in VStack(alignment: .leading, spacing: 8) { Label(flag.claim, systemImage: "exclamationmark.triangle").font(.headline); Text(flag.reason) }.padding().background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12)) }
         if !error.isEmpty { Notice(text: error) }
-    }.padding(20) }.navigationTitle(article.topic).navigationBarTitleDisplayMode(.inline).task { do { article = try await API.get("/api/v1/articles/\(API.id(article.id))") } catch { self.error = error.localizedDescription } } }
+    }.padding(20) }.navigationTitle(article.topic).navigationBarTitleDisplayMode(.inline).task { guard fetchFullArticle else { return }; do { article = try await API.get("/api/v1/articles/\(API.id(article.id))") } catch { self.error = error.localizedDescription } } }
 }
 
 struct DiscoverView: View {

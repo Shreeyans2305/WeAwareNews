@@ -25,7 +25,7 @@ Optional `FIREBASE_*` and `GOOGLE_WEB_CLIENT_ID` build flags remain available fo
 
 - Topic chips, explicit search submission, pull to refresh, pagination, and website-equivalent three readable guest stories with nine preview cards.
 - Discover swipe cards: left skips, right saves, with undo, a saved library, three verbatim key points, consensus, source notes and full-reader access. Decisions persist locally and are isolated per account; guests have a separate library.
-- Full mobile reader with source stance/notes/original links, agreement signal, flagged claims, publication metadata, original artwork, native sharing and disclosures.
+- Full mobile reader with source stance/notes/original links, agreement signal, flagged claims, publication metadata, original artwork, native sharing, verified incoming story links and disclosures.
 - Shared foreground audio player across tabs, article narration request/polling, playback, seek, speed, queue and previous/next controls. Leaving an article does not dispose the player; controls remain on the main screen.
 - Published podcast catalog, playback, RSS copy and session-local likes. Transcript and source fields render when included by the API.
 - Firebase email/password sign-in, registration, Google sign-in, password reset, verification send/refresh and sign-out.
@@ -46,7 +46,7 @@ Tests cover account creation mode, Google success/failure/retry, visible restore
 
 ## Remaining release work
 
-Register the production signing certificates and supply a final application identifier if different, final branding assets, release signing and Play Store metadata. The generated release Gradle configuration currently uses a **debug signing key** and must be changed before distribution. Foreground playback is implemented; Android background media service/notification/lock-screen playback is not yet enabled. App links for incoming shared stories require domain association and a routing implementation. This initial app does not add offline article caching or push notifications, which are not website features. No store upload or backend deployment is part of this scaffold.
+Register the production signing certificates and supply a final application identifier if different, final branding assets, release signing and Play Store metadata. The generated release Gradle configuration currently uses a **debug signing key** and must be changed before distribution. Before shipping, add the final distribution certificate SHA-256 to `WEAWARE/public/.well-known/assetlinks.json` and deploy Firebase Hosting so Android can verify the App Link. Foreground playback is implemented; Android background media service/notification/lock-screen playback is not yet enabled. This initial app does not add offline article caching or push notifications, which are not website features. No store upload or backend deployment is part of this scaffold.
 
 ## Native account persistence check
 

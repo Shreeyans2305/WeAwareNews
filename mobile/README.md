@@ -30,7 +30,7 @@ Enable Email/Password and Google providers in Firebase Authentication. Google si
 | Sherlock research and history | Authenticated `GET` and `POST /api/v1/sherlock/requests`, `GET /requests/{id}` |
 | Sherlock cancellation and PDF | Authenticated `POST /api/v1/sherlock/requests/{id}/cancel`, `GET /requests/{id}/report.pdf` |
 | Podcast editorial review | Authenticated `GET /api/v1/editorial/podcasts/drafts`, `POST /drafts/{id}/approve` |
-| Story sharing | System share sheet with `https://weaware.news/s/{id}` |
+| Story sharing | System share sheet with `https://weaware-3504c.web.app/s/{id}`; verified App Links / Universal Links open the native reader |
 
 Private calls use `Authorization: Bearer <Firebase ID token>`. The backend remains the authority for verified-email requirements, editor allowlists, pilot eligibility, credits, and request status. Newsletter writes require explicit consent and valid published topics. Sherlock creation uses a stable submission key for retries; completed reports and PDFs are available only after the backend's editorial gate.
 
@@ -55,4 +55,4 @@ Android has a Discover tab; iOS opens Discover from the cards button on News. Sw
 
 ## Release work
 
-Local builds do not establish production readiness. Before publishing, configure final application identifiers and signing, verify Google sign-in on physical devices, complete authenticated acceptance checks, supply store icons/screenshots and privacy disclosures, and test audio behavior on real devices. Universal Links/App Links require website association files and verified domains before links can reliably open installed applications.
+Local builds do not establish production readiness. Before publishing, configure final application identifiers and signing, verify Google sign-in on physical devices, complete authenticated acceptance checks, supply store icons/screenshots and privacy disclosures, and test audio behavior on real devices. Android's `assetlinks.json` must include the SHA-256 fingerprint of every signing certificate used for distribution. The checked-in file currently contains this workstation's debug certificate; add the Play App Signing and/or release certificate fingerprints before distributing Android builds. iOS Universal Links require deploying the website's Apple association file and the matching signed app entitlement.

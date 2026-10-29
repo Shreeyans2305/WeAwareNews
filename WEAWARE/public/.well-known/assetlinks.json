@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "news.weaware.weaware",
+      "sha256_cert_fingerprints": [
+        "33:A6:0E:8A:5F:B2:68:B7:99:E0:9D:FA:AC:37:1A:5B:28:A5:C1:05:19:1D:85:90:EE:5B:B5:5A:A2:90:10:60"
+      ]
+    }
+  }
+]

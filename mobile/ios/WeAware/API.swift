@@ -1,6 +1,7 @@
 import Foundation
 
 enum AppConfig {
+    static let siteOrigin = "https://weaware-3504c.web.app"
     static var origin: String { (Bundle.main.object(forInfoDictionaryKey: "APIOrigin") as? String ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
     static var firebaseKey: String { Bundle.main.object(forInfoDictionaryKey: "FirebaseAPIKey") as? String ?? "" }
     static var googleClientID: String { Bundle.main.object(forInfoDictionaryKey: "GoogleClientID") as? String ?? "" }

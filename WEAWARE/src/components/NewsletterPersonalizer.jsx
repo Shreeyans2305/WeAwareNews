@@ -76,7 +76,7 @@ export default function NewsletterPersonalizer({ stories = [], topics = [] }) {
           </p>
           <div className="t-card mt-4 overflow-hidden rounded-xl border">
             <div className="t-border border-b px-5 py-4">
-              <p className="t-muted text-xs">{cadence === 'weekly' ? 'Weekly' : 'Daily'} • weaware.news</p>
+              <p className="t-muted text-xs">{cadence === 'weekly' ? 'Weekly' : 'Daily'} • weaware-3504c.web.app</p>
               <p className="mt-1 font-display text-lg font-bold leading-tight">Your {cadence} Crosscheck, {previewStories.length} stories, 1 disagreement kept in</p>
             </div>
             <ul className="t-border divide-y">

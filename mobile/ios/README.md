@@ -10,7 +10,7 @@ Restrict the iOS key to bundle ID `news.weaware.ios` and APIs `identitytoolkit.g
 
 Enable email/password and Google providers in the existing Firebase project. Email verification and password resets use Firebase's configured action URLs. Google sign-in uses the system authentication browser with PKCE, validates OAuth state, then exchanges the Google identity for a Firebase session. Refresh tokens are stored in Keychain with this-device-only protection. Tokens are refreshed before protected requests; verification reload explicitly refreshes the token.
 
-For physical device builds select your Apple development team in Signing & Capabilities. No certificates or credentials are included. App Store distribution still needs the app icon, privacy declarations, signing, screenshots and review. Associated-domain entitlements and universal-link routing are not configured; story share links open the existing website.
+For physical device builds select your Apple development team in Signing & Capabilities. No certificates or credentials are included. App Store distribution still needs the app icon, privacy declarations, signing, screenshots and review. Story links use `https://weaware-3504c.web.app/s/{id}`. The app handles incoming links for that host; deploy `WEAWARE/public/.well-known/apple-app-site-association` with the website so iOS can verify the Universal Link association.
 
 ## Implemented
 
