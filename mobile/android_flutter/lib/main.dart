@@ -823,6 +823,11 @@ class AudioControls extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (!desk.loading)
+                  TextButton(
+                    onPressed: desk.changeSpeed,
+                    child: Text('${desk.speed}x'),
+                  ),
                 IconButton(
                   tooltip: 'Close player',
                   onPressed: desk.close,
@@ -841,11 +846,19 @@ class AudioControls extends StatelessWidget {
                     tooltip: 'Previous story',
                     onPressed: desk.index > 0 ? () => desk.skip(-1) : null,
                     icon: const Icon(Icons.skip_previous),
+                    constraints: const BoxConstraints(
+                      minWidth: 52,
+                      minHeight: 56,
+                    ),
                   ),
                   IconButton(
                     tooltip: 'Back 15 seconds',
                     onPressed: () => desk.seek(-15),
-                    icon: const Icon(Icons.replay),
+                    icon: const Icon(Icons.replay, size: 28),
+                    constraints: const BoxConstraints(
+                      minWidth: 52,
+                      minHeight: 56,
+                    ),
                   ),
                   IconButton(
                     tooltip: desk.player.playing ? 'Pause' : 'Play',
@@ -860,13 +873,21 @@ class AudioControls extends StatelessWidget {
                       desk.player.playing
                           ? Icons.pause_circle_filled
                           : Icons.play_circle_fill,
-                      size: 36,
+                      size: 44,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 64,
+                      minHeight: 64,
                     ),
                   ),
                   IconButton(
                     tooltip: 'Forward 15 seconds',
                     onPressed: () => desk.seek(15),
-                    icon: const Icon(Icons.forward_10),
+                    icon: const Icon(Icons.forward_10, size: 28),
+                    constraints: const BoxConstraints(
+                      minWidth: 52,
+                      minHeight: 56,
+                    ),
                   ),
                   IconButton(
                     tooltip: 'Next story',
@@ -875,12 +896,10 @@ class AudioControls extends StatelessWidget {
                         ? () => desk.skip(1)
                         : null,
                     icon: const Icon(Icons.skip_next),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      desk.changeSpeed();
-                    },
-                    child: Text('${desk.speed}x'),
+                    constraints: const BoxConstraints(
+                      minWidth: 52,
+                      minHeight: 56,
+                    ),
                   ),
                 ],
               ),

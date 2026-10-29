@@ -75,10 +75,97 @@ import MediaPlayer
 struct PlayerBar: View {
     @EnvironmentObject var audio: AudioPlayer
     var body: some View {
-        if !audio.title.isEmpty { VStack(spacing: 6) {
-            HStack { Image(systemName: "waveform"); VStack(alignment: .leading) { Text(audio.title).font(.caption.bold()).lineLimit(1); Text(audio.busy ? "Preparing AI narration…" : "AI narration").font(.caption2).foregroundStyle(.secondary) }; Spacer(); if audio.busy { ProgressView() } else { Button { audio.skip(-15) } label: { Image(systemName: "gobackward.15") }; Button { audio.playing ? audio.pause() : audio.play() } label: { Image(systemName: audio.playing ? "pause.fill" : "play.fill") }; Button { audio.skip(15) } label: { Image(systemName: "goforward.15") } }; Button { audio.stop() } label: { Image(systemName: "xmark") } }
-            HStack { Button { audio.previous() } label: { Label("Previous", systemImage: "backward.end.fill") }.disabled(!audio.canPrevious); Spacer(); Button { audio.next() } label: { Label("Next", systemImage: "forward.end.fill") }.disabled(!audio.canNext) }.font(.caption); if !audio.busy { HStack { Text("Speed").font(.caption2); Picker("Playback speed", selection: $audio.speed) { Text("0.75×").tag(Float(0.75)); Text("1×").tag(Float(1)); Text("1.25×").tag(Float(1.25)); Text("1.5×").tag(Float(1.5)); Text("2×").tag(Float(2)) }.pickerStyle(.segmented) } }; if audio.duration > 0 { Slider(value: Binding(get: { audio.position }, set: { audio.seek($0) }), in: 0...max(1, audio.duration)).accessibilityLabel("Playback position") }
-            if !audio.error.isEmpty { Text(audio.error).font(.caption).foregroundStyle(.red) }
-        }.padding().background(.regularMaterial) }
+        if !audio.title.isEmpty {
+            VStack(spacing: 8) {
+                HStack(spacing: 10) {
+                    Image(systemName: "waveform")
+                    VStack(alignment: .leading) {
+                        Text(audio.title).font(.caption.bold()).lineLimit(1)
+                        Text(audio.busy ? "Preparing AI narration…" : "AI narration")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 4)
+                    if audio.busy {
+                        ProgressView().frame(width: 44, height: 44)
+                    } else {
+                        Button { audio.stop() } label: {
+                            Image(systemName: "xmark")
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel("Close player")
+                    }
+                }
+
+                if audio.busy {
+                    ProgressView().frame(maxWidth: .infinity)
+                } else {
+                    HStack(spacing: 8) {
+                        Button { audio.previous() } label: {
+                            Image(systemName: "backward.end.fill")
+                                .frame(width: 48, height: 48)
+                                .contentShape(Rectangle())
+                        }
+                        .disabled(!audio.canPrevious)
+                        .accessibilityLabel("Previous story")
+
+                        Button { audio.skip(-15) } label: {
+                            Image(systemName: "gobackward.15")
+                                .font(.system(size: 21))
+                                .frame(width: 48, height: 48)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel("Back 15 seconds")
+
+                        Button { audio.playing ? audio.pause() : audio.play() } label: {
+                            Image(systemName: audio.playing ? "pause.fill" : "play.fill")
+                                .font(.system(size: 23, weight: .semibold))
+                                .frame(width: 56, height: 56)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel(audio.playing ? "Pause" : "Play")
+
+                        Button { audio.skip(15) } label: {
+                            Image(systemName: "goforward.15")
+                                .font(.system(size: 21))
+                                .frame(width: 48, height: 48)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel("Forward 15 seconds")
+
+                        Button { audio.next() } label: {
+                            Image(systemName: "forward.end.fill")
+                                .frame(width: 48, height: 48)
+                                .contentShape(Rectangle())
+                        }
+                        .disabled(!audio.canNext)
+                        .accessibilityLabel("Next story")
+                    }
+
+                    HStack {
+                        Text("Speed").font(.caption2)
+                        Picker("Playback speed", selection: $audio.speed) {
+                            Text("0.75×").tag(Float(0.75))
+                            Text("1×").tag(Float(1))
+                            Text("1.25×").tag(Float(1.25))
+                            Text("1.5×").tag(Float(1.5))
+                            Text("2×").tag(Float(2))
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                }
+
+                if audio.duration > 0 {
+                    Slider(value: Binding(get: { audio.position }, set: { audio.seek($0) }), in: 0...max(1, audio.duration))
+                        .accessibilityLabel("Playback position")
+                }
+                if !audio.error.isEmpty {
+                    Text(audio.error).font(.caption).foregroundStyle(.red)
+                }
+            }
+            .buttonStyle(.bordered)
+            .padding()
+            .background(.regularMaterial)
+        }
     }
 }
