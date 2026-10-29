@@ -13,7 +13,7 @@ const NAV_LINKS = [
   { id: 'feed', label: 'Feed' },
   { id: 'newsletters', label: 'Newsletters' },
   { id: 'podcasts', label: 'Podcasts' },
-  { id: 'sherlock', label: 'Sherlock' },
+  { id: 'sherlock', label: 'Sherlock · Experimental' },
   { id: 'about', label: 'About' },
 ]
 
@@ -23,8 +23,7 @@ const NewslettersPage = lazy(() => import('./components/NewslettersPage.jsx'))
 const PodcastsPage = lazy(() => import('./components/PodcastsPage.jsx'))
 const AboutPage = lazy(() => import('./components/AboutPage.jsx'))
 const SherlockPage = lazy(() => import('./components/SherlockPage.jsx'))
-const FREE_STORY_LIMIT = 3
-const GUEST_STORY_PREVIEW_LIMIT = 9
+const FEED_PAGE_SIZE = 24
 
 function ThemeToggle() {
   const { theme, toggle } = useTheme()
@@ -293,7 +292,7 @@ function PerspectiveSection() {
 
 function Shell() {
   const { theme } = useTheme()
-  const { user, requestSignIn } = useAuth()
+  const { user } = useAuth()
   const [view, setView] = useState('hero')
   const [topic, setTopic] = useState('All')
   const [query, setQuery] = useState('')
@@ -309,7 +308,6 @@ function Shell() {
   const [apiError, setApiError] = useState('')
   const [detail, setDetail] = useState(null)
   const filtered = stories
-  const previewStories = filtered.slice(0, FREE_STORY_LIMIT)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -321,7 +319,7 @@ function Shell() {
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
       setLoading(true)
-      fetchArticles({ topic, query, limit: user ? 24 : GUEST_STORY_PREVIEW_LIMIT, signal: controller.signal })
+      fetchArticles({ topic, query, limit: FEED_PAGE_SIZE, signal: controller.signal })
         .then((result) => {
           setStories(prioritizeStoriesWithImages((result.articles || []).map(toStory)))
           setTotal(result.total || 0)
@@ -352,13 +350,6 @@ function Shell() {
     return () => controller.abort()
   }, [activeId])
 
-  useEffect(() => {
-    if (!user && activeId && !previewStories.some((story) => story.id === activeId)) {
-      setActiveId(null)
-      requestSignIn()
-    }
-  }, [user, activeId, requestSignIn, stories])
-
   const navigate = (next) => {
     if (next === 'hero') {
       setActiveId(null)
@@ -378,7 +369,7 @@ function Shell() {
     )
   }
 
-  const hasMoreStories = filtered.length > previewStories.length || filtered.length < total
+  const hasMoreStories = filtered.length < total
   const activeStory = detail || stories.find((story) => story.id === activeId) || null
 
   const resultLabel =
@@ -387,10 +378,6 @@ function Shell() {
     (query.trim() !== '' ? ` matching “${query.trim()}”` : '')
 
   const openStory = (id) => {
-    if (!user && !previewStories.some((story) => story.id === id)) {
-      requestSignIn()
-      return
-    }
     setActiveId(id)
     setView('feed')
     window.scrollTo(0, 0)
@@ -466,26 +453,16 @@ function Shell() {
             : loading && !stories.length ? <section className="mx-auto max-w-4xl px-6 py-20 text-center t-muted">Loading the latest cross-checked articles…</section>
               : <>
                 <FeedGrid
-                  stories={user ? filtered : previewStories}
-                  lockedStories={user ? [] : filtered.slice(FREE_STORY_LIMIT, GUEST_STORY_PREVIEW_LIMIT)}
-                  resultLabel={user ? resultLabel : `Showing ${previewStories.length} of ${total} stories`}
+                  stories={filtered}
+                  lockedStories={[]}
+                  resultLabel={resultLabel}
                   onOpen={openStory}
-                  onUnlock={requestSignIn}
                   onListen={startListen}
                   onShare={setShareId}
                   onClear={() => { setTopic('All'); setQuery('') }}
                 />
                 {hasMoreStories && <div className="mx-auto max-w-4xl px-6 pb-12 text-center">
-                  {!user ? (
-                    <div className="t-card rounded-2xl border px-6 py-7 sm:px-10">
-                      <p className="eyebrow-kanit t-muted text-[11px]">You’re reading a preview</p>
-                      <h2 className="mt-2 font-display text-2xl font-bold tracking-tight sm:text-3xl">See the full picture</h2>
-                      <p className="t-muted mx-auto mt-2 max-w-xl text-sm leading-relaxed">Sign in to explore every cross-checked story and read beyond these featured articles.</p>
-                      <button type="button" onClick={requestSignIn} className="t-btn-primary mt-5 rounded-full px-6 py-2.5 text-sm font-medium">Sign in to read more</button>
-                    </div>
-                  ) : (
-                    <button type="button" onClick={loadMoreStories} disabled={loadingMore} className="t-btn-outline rounded-full px-6 py-2.5 text-sm">{loadingMore ? 'Loading…' : 'Load more articles'}</button>
-                  )}
+                  <button type="button" onClick={loadMoreStories} disabled={loadingMore} className="t-btn-outline rounded-full px-6 py-2.5 text-sm">{loadingMore ? 'Loading…' : 'Load more articles'}</button>
                 </div>}
               </>
         ) : null}

@@ -21,7 +21,7 @@ Build and preview the production bundle with `npm run build` and `npm run previe
 - **Podcasts:** Play published episodes, copy the RSS feed URL, and access the article listening queue. Authorized editors can review podcast drafts from the editorial interface.
 - **About:** Explains WeAware's multi-source reading approach, limitations of agreement signals, and ways to read, follow, and listen.
 
-Guests can read three story previews and browse a limited feed. Signing in enables the larger feed and account features. This is an access gate in the client experience, not a claim that published articles are private data.
+The full published story feed, article reading, article audio, and podcast episodes are available without signing in. Sherlock Mode is experimental and requires a verified signed-in account with pilot access. Newsletter subscriptions and editor-only podcast review continue to use account access where needed.
 
 ## Frontend configuration
 

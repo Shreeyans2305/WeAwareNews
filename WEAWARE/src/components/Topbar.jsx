@@ -7,7 +7,7 @@ const PAGES = [
   { id: 'feed', label: 'Feed' },
   { id: 'newsletters', label: 'Newsletters' },
   { id: 'podcasts', label: 'Podcasts' },
-  { id: 'sherlock', label: 'Sherlock' },
+  { id: 'sherlock', label: 'Sherlock · Experimental' },
   { id: 'about', label: 'About' },
 ]
 
