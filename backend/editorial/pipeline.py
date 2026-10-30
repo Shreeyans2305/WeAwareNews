@@ -184,11 +184,13 @@ def _load_story(conn, story_id: str) -> tuple[dict, list[dict]]:
 
 
 def _safe_image_url(sources: list[dict], selected_id: Optional[str]) -> Optional[str]:
+    from ingestion.image_filter import is_valid_editorial_image
+
     selected = next((s for s in sources if s["item_hash"] == selected_id), None)
     candidates = ([selected] if selected else []) + sources
     for source in candidates:
         url = source.get("image_url")
-        if url and url.startswith("https://"):
+        if url and url.startswith("https://") and is_valid_editorial_image(url):
             return url
     return None
 

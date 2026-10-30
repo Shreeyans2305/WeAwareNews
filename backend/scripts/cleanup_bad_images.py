@@ -102,7 +102,8 @@ def get_image_for_url(url, timeout=10):
 def main():
     parser = argparse.ArgumentParser(description="Clean up bad image URLs in Postgres")
     parser.add_argument("--apply", action="store_true", help="Actually apply changes (default is dry-run)")
-    parser.add_argument("--backfill", action="store_true", help="Re-fetch images for cleaned rows")
+    parser.add_argument("--backfill", action="store_true", help="Re-fetch images for cleaned rows and published articles")
+    parser.add_argument("--articles-only", action="store_true", help="Limit --apply to published article images")
     args = parser.parse_args()
 
     print(f"Connecting to Postgres at {PROXY_HOST}:{PROXY_PORT}...")
@@ -126,6 +127,16 @@ def main():
     print(f"Total items with images: {len(all_rows)}")
     print(f"Valid editorial images:  {len(good_rows)}")
     print(f"Bad images to clean:     {len(bad_rows)}")
+
+    # Published articles store their selected image separately from the item
+    # records. Inspect these too, so the dry run reports the exact scope.
+    cur.execute(
+        "SELECT article_id, image_url, sources FROM editorial_articles "
+        "WHERE status = 'published' AND image_url IS NOT NULL AND image_url != ''"
+    )
+    article_rows = cur.fetchall()
+    bad_articles = [row for row in article_rows if not is_valid_editorial_image(row[1])]
+    print(f"Published articles with invalid images: {len(bad_articles)}")
     print()
 
     if bad_rows:
@@ -135,10 +146,43 @@ def main():
 
     if not args.apply:
         print(f"\n[DRY RUN] Would NULL out {len(bad_rows)} bad image_url values.")
+        if bad_articles:
+            print("Published articles to replace/clear:")
+            for article_id, image_url, _sources in bad_articles[:20]:
+                print(f"  {article_id} | {image_url[:100]}")
         print("Run with --apply to actually apply changes.")
         print("Run with --apply --backfill to also re-fetch images.")
         cur.close()
         conn.close()
+        return
+
+    # Published articles store their selected image separately from the item
+    # records. Rebuild invalid article images from the article's own cited
+    # source pages so existing content is corrected as well as future posts.
+    article_replaced = 0
+    for article_id, old_image, sources in bad_articles:
+        replacement = None
+        if args.backfill:
+            for source in (sources or []):
+                source_url = source.get("url") if isinstance(source, dict) else None
+                if source_url:
+                    replacement = get_image_for_url(source_url)
+                    if replacement:
+                        break
+                    time.sleep(0.5)
+        cur.execute(
+            "UPDATE editorial_articles SET image_url = %s, updated_at = NOW() WHERE article_id = %s",
+            (replacement, article_id),
+        )
+        article_replaced += bool(replacement)
+    conn.commit()
+    print(f"Updated {len(bad_articles)} published article image(s); "
+          f"replaced {article_replaced} image(s) where a safe source image was found.")
+
+    if args.articles_only:
+        cur.close()
+        conn.close()
+        print("Published article image cleanup complete.")
         return
 
     # Apply: NULL out bad image URLs

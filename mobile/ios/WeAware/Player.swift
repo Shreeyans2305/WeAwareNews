@@ -93,6 +93,8 @@ struct PlayerBar: View {
                                 .frame(width: 44, height: 44)
                                 .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .background(Circle().fill(.primary.opacity(0.1)))
                         .accessibilityLabel("Close player")
                     }
                 }
@@ -100,13 +102,16 @@ struct PlayerBar: View {
                 if audio.busy {
                     ProgressView().frame(maxWidth: .infinity)
                 } else {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 0) {
                         Button { audio.previous() } label: {
                             Image(systemName: "backward.end.fill")
-                                .frame(width: 48, height: 48)
+                                .frame(width: 44, height: 48)
                                 .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .background(Circle().fill(.primary.opacity(0.08)))
                         .disabled(!audio.canPrevious)
+                        .opacity(audio.canPrevious ? 1 : 0.45)
                         .accessibilityLabel("Previous story")
 
                         Button { audio.skip(-15) } label: {
@@ -115,6 +120,8 @@ struct PlayerBar: View {
                                 .frame(width: 48, height: 48)
                                 .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .background(Circle().fill(.primary.opacity(0.08)))
                         .accessibilityLabel("Back 15 seconds")
 
                         Button { audio.playing ? audio.pause() : audio.play() } label: {
@@ -123,6 +130,8 @@ struct PlayerBar: View {
                                 .frame(width: 56, height: 56)
                                 .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .background(Circle().fill(.primary.opacity(0.14)))
                         .accessibilityLabel(audio.playing ? "Pause" : "Play")
 
                         Button { audio.skip(15) } label: {
@@ -131,28 +140,33 @@ struct PlayerBar: View {
                                 .frame(width: 48, height: 48)
                                 .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .background(Circle().fill(.primary.opacity(0.08)))
                         .accessibilityLabel("Forward 15 seconds")
 
                         Button { audio.next() } label: {
                             Image(systemName: "forward.end.fill")
-                                .frame(width: 48, height: 48)
+                                .frame(width: 44, height: 48)
                                 .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .background(Circle().fill(.primary.opacity(0.08)))
                         .disabled(!audio.canNext)
+                        .opacity(audio.canNext ? 1 : 0.45)
                         .accessibilityLabel("Next story")
                     }
+                    .frame(maxWidth: .infinity)
 
-                    HStack {
-                        Text("Speed").font(.caption2)
-                        Picker("Playback speed", selection: $audio.speed) {
+                    Picker("Playback speed", selection: $audio.speed) {
                             Text("0.75×").tag(Float(0.75))
                             Text("1×").tag(Float(1))
                             Text("1.25×").tag(Float(1.25))
                             Text("1.5×").tag(Float(1.5))
                             Text("2×").tag(Float(2))
-                        }
-                        .pickerStyle(.segmented)
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
                 }
 
                 if audio.duration > 0 {
@@ -163,8 +177,9 @@ struct PlayerBar: View {
                     Text(audio.error).font(.caption).foregroundStyle(.red)
                 }
             }
-            .buttonStyle(.bordered)
-            .padding()
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             .background(.regularMaterial)
         }
     }

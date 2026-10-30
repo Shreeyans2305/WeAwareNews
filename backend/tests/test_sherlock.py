@@ -88,6 +88,31 @@ class QualityTests(unittest.TestCase):
         with self.assertRaises(ResearchError):
             validate_report(report, evidence, sources)
 
+    def test_numeric_facts_must_appear_in_cited_passages(self):
+        sources, evidence, report = fixtures()
+        report['sections'][0]['paragraphs'][0]['text'] += ' The total was 42.'
+        with self.assertRaisesRegex(ResearchError, 'numeric claim'):
+            validate_report(report, evidence, sources)
+
+    def test_percentage_requires_explicit_baseline(self):
+        sources, evidence, report = fixtures()
+        quote = 'Measurements show a 42% decline from the 1980 benchmark in the reported indicator.'
+        sources[1]['text'] += ' ' + quote
+        evidence['claims'][0]['evidence'][0]['quote'] = quote
+        report['sections'][0]['paragraphs'][0]['text'] += ' The indicator declined by 42%.'
+        with self.assertRaisesRegex(ResearchError, 'comparison or baseline'):
+            validate_report(report, evidence, sources)
+
+    def test_old_projections_need_dated_assessment_attribution(self):
+        sources, evidence, report = fixtures()
+        quote = 'The 2018 assessment projected recovery by 2060 based on observed atmospheric measurements.'
+        sources[1]['text'] += ' ' + quote
+        sources[1]['publishedAt'] = '2019-01-01'
+        evidence['claims'][0]['evidence'][0]['quote'] = quote
+        report['sections'][0]['paragraphs'][0]['text'] += ' Recovery is projected by 2060.'
+        with self.assertRaisesRegex(ResearchError, 'dated assessment'):
+            validate_report(report, evidence, sources)
+
     def test_evidence_selects_only_existing_verbatim_passages(self):
         from research.pipeline import evidence_passages, resolve_evidence_passages
         sources, evidence, _ = fixtures()

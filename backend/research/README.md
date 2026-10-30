@@ -2,6 +2,8 @@
 
 Website-only private research, manual tester access, mandatory editor approval. No subscription billing, checkout, or email integration. The manually provisioned pilot is deployed at https://weaware-3504c.web.app. Configuration defaults remain disabled for new installations. Delivery requires editor approval.
 
+Readiness update, 29 October 2026: the API and worker are now deployed with report gates that reject uncited numeric claims, percentages without a source-backed comparison/baseline, and projections without explicit dated-assessment attribution. The independent-review prompt highlights these same checks. The focused quality suite passes 26 checks. No live investigation has exercised the new gates; production admission remains paused pending a bounded benchmark and human editorial review.
+
 ## What is implemented
 
 - Firebase-authenticated request/history/detail/cancellation and private PDF-download endpoints under `/api/v1/sherlock`; verified email and database ownership are enforced server-side.
@@ -9,7 +11,7 @@ Website-only private research, manual tester access, mandatory editor approval. 
 - Atomic submission-key deduplication and credit reservation, terminal failure/cancellation refunds, consumption only after human approval. Existing reports remain readable after access expires. Revocation blocks new work; already accepted work may finish.
 - Durable PostgreSQL queue and isolated one-request worker with a 30-minute fenced lease, 20-minute provider deadline, short transactions, persisted evidence/stage artifacts, and recovery of abandoned jobs. Expired jobs fail and refund rather than automatically repeating ambiguous paid calls.
 - Six deliberately different searches; at most 18 candidate page fetches; at most ten retrieved sources; minimum six accessible sources, primary evidence, and three independent origins. Source redirects repeat robots checks for every destination/path, with a five-hop bound, pinned public DNS and verified TLS. Protego handles wildcard/longest-match robots rules, and publisher crawl delays/request rates are honored within the retrieval deadline. Robots-file redirects follow the public-HTTPS rules of RFC 9309. PDFs, inaccessible/paywalled documents and robots-disallowed sources are skipped.
-- Evidence map with 8–18 findings, model selection of numbered original passages (quotation text copied by the application), and exact passage checks, a user-selected analysis length (Brief: 400–700 words; Standard: 800–1,500; Detailed: 1,500–2,400), paragraph-to-claim references, a second model verification pass, and mandatory human review. Length changes presentation, not research rigor or source requirements. Source independence and truth still require editorial judgment; neither word counts nor model agreement proves reliability.
+- Evidence map with 8–18 findings, model selection of numbered original passages (quotation text copied by the application), and exact passage checks, a user-selected analysis length (Brief: 400–700 words; Standard: 800–1,500; Detailed: 1,500–2,400), paragraph-to-claim references, a second model verification pass, and mandatory human review. A deterministic report gate also requires every numeric token to occur in the cited original passages, requires percentages to state a comparison/baseline present in those passages, and requires projections to name the dated assessment in the prose. Length changes presentation, not research rigor or source requirements. Source independence and truth still require editorial judgment; neither word counts nor model agreement proves reliability.
 - Search snippets are discovery leads, never verified evidence. Text matching proves a quotation exists, not that the source or interpretation is correct. The reviewer sees original retrieved text as well as draft and claims.
 
 ## Readable reports and PDF downloads
@@ -57,6 +59,8 @@ From `backend/`, configure worker/admin database access via `DB_HOST`, `DB_PORT`
    ```sh
    docker build -f research/Dockerfile -t weaware-sherlock-worker .
    ```
+
+   Cloud Build can produce and push a tagged worker image from the backend context with `gcloud builds submit backend --config backend/research/cloudbuild.yaml --substitutions=_TAG=YOUR_TAG`.
 
    Configure the Cloud Run Job with one task, parallelism one, maximum retries zero, a 25-minute job timeout, the Cloud SQL mount and the worker environment/secrets. Use authenticated Cloud Scheduler job execution hourly; set maximum instances/executions conservatively. One execution handles one request. The database fences overlapping executions and spending even if a scheduler retries. Scheduler and infrastructure setup are not automatically installed by this feature.
 6. Set worker `SHERLOCK_PAID_CALLS_ENABLED=true`, then enable the shared budget explicitly:

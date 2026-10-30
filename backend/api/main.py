@@ -64,6 +64,7 @@ _BAD_IMAGE_SUBSTRINGS = (
     "nav-logo", "nav_logo", "company-logo", "company_logo",
     "/pixel", "/beacon", "/track", "1x1",
     "/profile_images/", "/profile_banners/", "/default_profile",
+    "overlay-toi",
 )
 
 _BAD_IMAGE_REGEXES = [
@@ -72,7 +73,7 @@ _BAD_IMAGE_REGEXES = [
 ]
 
 _ALLOWLIST_DOMAINS = {
-    "ichef.bbci.co.uk", "images.indianexpress.com", "static.toiimg.com",
+    "ichef.bbci.co.uk", "images.indianexpress.com",
     "i.cbc.ca", "npr.brightspotcdn.com", "media.zenfs.com",
     "dims.apnews.com", "s.yimg.com", "c.files.bbci.co.uk", "image.cnbcfm.com",
 }

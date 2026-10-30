@@ -200,7 +200,7 @@ struct DiscoverView: View {
             HStack(spacing: 20) {
                 Button { decide(save: false) } label: { Label("Skip", systemImage: "xmark").frame(maxWidth: .infinity) }.buttonStyle(.bordered).disabled(current == nil)
                 Button { if let previous { history = previous; self.previous = nil; persist(); status = "Last swipe undone." } } label: { Image(systemName: "arrow.uturn.backward").accessibilityLabel("Undo last swipe") }.disabled(previous == nil)
-                Button { decide(save: true) } label: { Label("Save", systemImage: "bookmark.fill").frame(maxWidth: .infinity) }.buttonStyle(.borderedProminent).disabled(current == nil)
+                Button { decide(save: true) } label: { Label("Save", systemImage: "bookmark.fill").frame(maxWidth: .infinity) }.buttonStyle(.borderedProminent).tint(.blue).accessibilityIdentifier("discover.save").disabled(current == nil)
             }.disabled(deciding).padding().background(.regularMaterial)
         }
         .task(id: scope) { history = DiscoverHistory.load(scope: scope); previous = nil; status = ""; await load(reset: true) }

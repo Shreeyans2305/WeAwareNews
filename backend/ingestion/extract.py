@@ -29,6 +29,7 @@ from typing import Dict, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
 
 from bs4 import BeautifulSoup
+from ingestion.image_filter import is_valid_editorial_image
 
 # ── Configuration constants ───────────────────────────────────────────────────
 
@@ -193,6 +194,8 @@ def _fetch_jina(
                     meta_tw = soup.find("meta", attrs={"name": "twitter:image"})
                     if meta_tw and meta_tw.get("content"):
                         image_url = meta_tw["content"]
+            if image_url and not is_valid_editorial_image(image_url):
+                image_url = None
         except Exception:
             pass
             

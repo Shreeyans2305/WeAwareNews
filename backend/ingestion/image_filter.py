@@ -58,6 +58,8 @@ _BLOCKLIST_SUBSTRINGS = (
     "/profile_images/",
     "/profile_banners/",
     "/default_profile",
+    # TOI's resize URL exposes its embedded publisher badge in this marker.
+    "overlay-toi",
 )
 
 # Regex patterns for more nuanced matching
@@ -85,7 +87,6 @@ _ALLOWLIST_DOMAINS = {
     # Major news photo CDNs — images from these are almost always editorial
     "ichef.bbci.co.uk",          # BBC
     "images.indianexpress.com",  # Indian Express
-    "static.toiimg.com",         # Times of India
     "i.cbc.ca",                  # CBC News
     "npr.brightspotcdn.com",     # NPR
     "media.zenfs.com",           # Yahoo News

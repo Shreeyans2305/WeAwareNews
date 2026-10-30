@@ -20,6 +20,7 @@ from urllib.request import Request, urlopen
 import feedparser
 
 from ingestion.utils import UTC, normalize_text, strip_html
+from ingestion.image_filter import is_valid_editorial_image
 
 
 class RSSAdapter:
@@ -168,6 +169,8 @@ class RSSAdapter:
 
             if image_url:
                 image_url = image_url.strip() or None
+                if not is_valid_editorial_image(image_url):
+                    image_url = None
 
             entries.append(
                 {

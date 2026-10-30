@@ -6,5 +6,8 @@ GOOGLE_REVERSED_CLIENT_ID =
 PRODUCT_BUNDLE_IDENTIFIER = news.weaware.ios
 IPHONEOS_DEPLOYMENT_TARGET = 17.0
 SWIFT_VERSION = 5.0
+// Personal development teams cannot provision Associated Domains. Set this in
+// Config.local.xcconfig only when signing with a team that supports the capability.
+CODE_SIGN_ENTITLEMENTS =
 
 #include? "Config.local.xcconfig"

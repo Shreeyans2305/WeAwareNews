@@ -10,6 +10,7 @@ import time
 from google.cloud import secretmanager
 from google.cloud.sql.connector import Connector, IPTypes
 import pg8000
+from ingestion.image_filter import is_valid_editorial_image
 
 def get_image_for_url(url, timeout=10):
     try:
@@ -21,10 +22,14 @@ def get_image_for_url(url, timeout=10):
             soup = BeautifulSoup(html, "html.parser")
             meta_og = soup.find("meta", property="og:image")
             if meta_og and meta_og.get("content"):
-                return meta_og["content"]
+                candidate = meta_og["content"]
+                if is_valid_editorial_image(candidate):
+                    return candidate
             meta_tw = soup.find("meta", attrs={"name": "twitter:image"})
             if meta_tw and meta_tw.get("content"):
-                return meta_tw["content"]
+                candidate = meta_tw["content"]
+                if is_valid_editorial_image(candidate):
+                    return candidate
     except Exception:
         pass
     return None

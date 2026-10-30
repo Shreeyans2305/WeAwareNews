@@ -1,0 +1,15 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - research/Dockerfile
+      - -t
+      - us-central1-docker.pkg.dev/weaware/cloud-run-source-deploy/weaware-sherlock-worker:${_TAG}
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - us-central1-docker.pkg.dev/weaware/cloud-run-source-deploy/weaware-sherlock-worker:${_TAG}
+images:
+  - us-central1-docker.pkg.dev/weaware/cloud-run-source-deploy/weaware-sherlock-worker:${_TAG}

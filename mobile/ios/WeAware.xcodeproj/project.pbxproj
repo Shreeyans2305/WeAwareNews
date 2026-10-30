@@ -32,7 +32,6 @@
 /* Begin PBXFileReference section */
 		000000000000000000000006 /* WeAware.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = WeAware.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000008 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
-		BB0000000000000000000002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		000000000000000000000064 /* API.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = API.swift; sourceTree = "<group>"; };
 		000000000000000000000065 /* AccountViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountViews.swift; sourceTree = "<group>"; };
 		000000000000000000000066 /* Auth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth.swift; sourceTree = "<group>"; };
@@ -43,6 +42,7 @@
 		00000000000000000000006B /* WeAwareApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeAwareApp.swift; sourceTree = "<group>"; };
 		AA0000000000000000000001 /* AuthTests/AuthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthTests/AuthTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000003 /* WeAwareAuthTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = WeAwareAuthTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000000002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -143,6 +143,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		BB0000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB0000000000000000000001 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		000000000000000000000007 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -168,17 +179,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXResourcesBuildPhase section */
-		BB0000000000000000000003 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				BB0000000000000000000001 /* Assets.xcassets in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
 		AA0000000000000000000006 /* PBXTargetDependency */ = {
@@ -218,7 +218,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 55NHMS37BA;
-				CODE_SIGN_ENTITLEMENTS = WeAware/WeAware.entitlements;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = WeAware/Info.plist;
@@ -234,7 +233,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 55NHMS37BA;
-				CODE_SIGN_ENTITLEMENTS = WeAware/WeAware.entitlements;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = WeAware/Info.plist;
