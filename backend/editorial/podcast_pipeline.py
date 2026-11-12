@@ -75,8 +75,10 @@ def create_daily_draft() -> dict:
 
         with conn.cursor() as cur:
             cur.execute("""SELECT
-                         (SELECT COALESCE(SUM(estimated_cost_usd),0) FROM editorial_articles) +
-                         (SELECT COALESCE(SUM(estimated_cost_usd),0) FROM podcast_episodes)""")
+                         (SELECT COALESCE(SUM(estimated_cost_usd),0) FROM editorial_articles
+                          WHERE created_at >= DATE_TRUNC('day', NOW() AT TIME ZONE 'UTC')) +
+                         (SELECT COALESCE(SUM(estimated_cost_usd),0) FROM podcast_episodes
+                          WHERE created_at >= DATE_TRUNC('day', NOW() AT TIME ZONE 'UTC'))""")
             tracked_spend = float(cur.fetchone()[0] or 0)
         budget = float(os.getenv("WEAWARE_GEMINI_BUDGET_USD", "10"))
         if budget > 0 and tracked_spend + float(os.getenv("WEAWARE_GEMINI_CALL_RESERVE_USD", "0.25")) > budget:

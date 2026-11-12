@@ -151,10 +151,13 @@ def _load_candidate_ids(conn, limit: int) -> list[str]:
 
 
 def _tracked_spend(conn) -> float:
+    """Return Gemini spend for today (UTC) only, so the daily budget resets each run."""
     with conn.cursor() as cur:
         cur.execute("""SELECT
-                     (SELECT COALESCE(SUM(estimated_cost_usd),0) FROM editorial_articles) +
-                     (SELECT COALESCE(SUM(estimated_cost_usd),0) FROM podcast_episodes)""")
+                     (SELECT COALESCE(SUM(estimated_cost_usd),0) FROM editorial_articles
+                      WHERE created_at >= DATE_TRUNC('day', NOW() AT TIME ZONE 'UTC')) +
+                     (SELECT COALESCE(SUM(estimated_cost_usd),0) FROM podcast_episodes
+                      WHERE created_at >= DATE_TRUNC('day', NOW() AT TIME ZONE 'UTC'))""")
         total = float(cur.fetchone()[0] or 0)
     # End the read transaction before waiting on the next remote Gemini call.
     conn.commit()
